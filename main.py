@@ -182,7 +182,7 @@ class PaperBot:
                 if stats:
                     upnl = pos.unrealized_pnl(stats["price_a"], stats["price_b"])
                     lines.append(
-                        f"`{pos.pair_key}` {pos.direction} | "
+                        f"`{pos.pair_key}` `{pos.direction}` | "
                         f"z={stats['zscore']:.2f} | uPnL=`${upnl:+.2f}`"
                     )
             if len(lines) > 1:
