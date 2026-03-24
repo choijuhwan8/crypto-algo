@@ -1,0 +1,17 @@
+# Core exchange / data
+ccxt>=4.3.0
+
+# Numerical / statistics
+numpy>=1.26
+pandas>=2.2
+scipy>=1.13
+statsmodels>=0.14
+
+# Scheduling
+APScheduler>=3.10
+
+# Telegram + HTTP
+httpx>=0.27
+
+# Env vars
+python-dotenv>=1.0
