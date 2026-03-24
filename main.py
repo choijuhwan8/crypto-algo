@@ -173,6 +173,21 @@ class PaperBot:
         for pair_info in pairs:
             await self._process_pair(pair_info)
 
+        # Hourly PnL update for open positions
+        open_positions = self.state.get_open_positions()
+        if open_positions:
+            lines = ["*Hourly PnL Update*"]
+            for pos in open_positions.values():
+                stats = self.signal_svc.get_stats(pos.pair_key)
+                if stats:
+                    upnl = pos.unrealized_pnl(stats["price_a"], stats["price_b"])
+                    lines.append(
+                        f"`{pos.pair_key}` {pos.direction} | "
+                        f"z={stats['zscore']:.2f} | uPnL=`${upnl:+.2f}`"
+                    )
+            if len(lines) > 1:
+                await self.telegram.send("\n".join(lines))
+
         self.state.append_run_log("HOURLY", f"pairs={len(pairs)}")
 
     async def _process_pair(self, pair_info: dict) -> None:
