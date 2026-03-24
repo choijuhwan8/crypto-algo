@@ -89,7 +89,9 @@ class DataService:
         """
         usdt_symbol = f"{token}/USDT:USDT"
         all_rows: list = []
-        since: Optional[int] = None
+
+        # Start from far enough in the past to collect *limit* hourly candles
+        since = int(time.time() * 1000) - limit * 3_600_000
 
         while len(all_rows) < limit:
             batch_size = min(_BATCH, limit - len(all_rows))
@@ -104,14 +106,8 @@ class DataService:
             if not rows:
                 break
 
-            if since is None:
-                # First batch – prepend (we paginate backwards below)
-                all_rows = rows + all_rows
-                # Walk backwards: set since to earliest timestamp we have
-                since = rows[0][0] - batch_size * 3_600_000
-            else:
-                all_rows = rows + all_rows
-                since = rows[0][0] - batch_size * 3_600_000
+            all_rows.extend(rows)
+            since = rows[-1][0] + 3_600_000  # advance to next candle
 
             if len(rows) < batch_size:
                 break
