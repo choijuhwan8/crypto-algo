@@ -185,10 +185,29 @@ class StateManager:
     # ------------------------------------------------------------------
 
     def _save(self) -> None:
+        open_positions_data = [
+            {
+                "position_id": p.position_id,
+                "pair_key": p.pair_key,
+                "sym_a": p.sym_a,
+                "sym_b": p.sym_b,
+                "direction": p.direction,
+                "entry_price_a": p.entry_price_a,
+                "entry_price_b": p.entry_price_b,
+                "notional_a": p.notional_a,
+                "notional_b": p.notional_b,
+                "entry_time": p.entry_time.isoformat(),
+                "entry_zscore": p.entry_zscore,
+                "pnl": p.pnl,
+                "status": p.status,
+            }
+            for p in self._open_positions.values()
+        ]
         state = {
             "equity": self._equity,
             "peak_equity": self._peak_equity,
             "total_fees": self._total_fees,
+            "open_positions": open_positions_data,
             "closed_positions": self._closed_positions[-2_000:],
             "saved_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -217,7 +236,29 @@ class StateManager:
             self._peak_equity = data.get("peak_equity", INITIAL_CAPITAL)
             self._total_fees = data.get("total_fees", 0.0)
             self._closed_positions = data.get("closed_positions", [])
-            logger.info(f"StateManager: loaded state – equity={self._equity:.2f}")
+            # Restore open positions
+            from .execution_engine import Position
+            for p in data.get("open_positions", []):
+                pos = Position(
+                    position_id=p["position_id"],
+                    pair_key=p["pair_key"],
+                    sym_a=p["sym_a"],
+                    sym_b=p["sym_b"],
+                    direction=p["direction"],
+                    entry_price_a=p["entry_price_a"],
+                    entry_price_b=p["entry_price_b"],
+                    notional_a=p["notional_a"],
+                    notional_b=p["notional_b"],
+                    entry_time=datetime.fromisoformat(p["entry_time"]),
+                    entry_zscore=p["entry_zscore"],
+                    pnl=p["pnl"],
+                    status=p["status"],
+                )
+                self._open_positions[pos.pair_key] = pos
+            logger.info(
+                f"StateManager: loaded state – equity={self._equity:.2f} "
+                f"open_positions={len(self._open_positions)}"
+            )
         except Exception as exc:
             logger.error(f"StateManager._load failed: {exc}")
 
