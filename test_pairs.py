@@ -22,12 +22,12 @@ def compute_ic(log_a, log_b, beta, alpha, window=ROLLING_WINDOW, horizon=24):
     future_ret = spread.shift(-horizon) - spread
     valid = zscore.dropna().index.intersection(future_ret.dropna().index)
     if len(valid) < 100:
-        return 0.0
+        return None
     ic = float(zscore.loc[valid].corr(future_ret.loc[valid]))
-    return ic if not np.isnan(ic) else 0.0
+    return ic if not np.isnan(ic) else None
 
-print(f"\n{'Pair':<20} {'corr_p':>7} {'corr_r':>7} {'adf_p':>7} {'IC':>8} {'pass_ic':>8}")
-print("-" * 65)
+print(f"\n{'Pair':<20} {'corr_p':>7} {'corr_r':>7} {'adf_p':>7} {'IC':>8} {'valid_pts':>10}")
+print("-" * 70)
 
 for tok_a, tok_b in all_pairs:
     df_a = ds.get_cache(tok_a)
@@ -65,8 +65,18 @@ for tok_a, tok_b in all_pairs:
     if adf_pval >= COINT_PVALUE_MAX:
         continue
 
+    # compute IC and valid point count
+    spread_s = log_a - (intercept + slope * log_b)
+    win = min(ROLLING_WINDOW, len(spread_s))
+    zscore = (spread_s - spread_s.rolling(win).mean()) / spread_s.rolling(win).std()
+    future_ret = spread_s.shift(-24) - spread_s
+    valid = zscore.dropna().index.intersection(future_ret.dropna().index)
+    valid_pts = len(valid)
     ic = compute_ic(log_a, log_b, float(slope), float(intercept))
-    pass_ic = ic <= IC_THRESHOLD
-    print(f"{tok_a+'-'+tok_b:<20} {corr_price:>7.3f} {corr_return:>7.3f} {adf_pval:>7.4f} {ic:>8.4f} {'YES' if pass_ic else 'NO':>8}")
+    ic_str = f"{ic:.4f}" if ic is not None else "N/A (< 100 pts)"
 
-print(f"\nIC_THRESHOLD = {IC_THRESHOLD} (pairs need IC <= this to pass)")
+    print(f"{tok_a+'-'+tok_b:<20} {corr_price:>7.3f} {corr_return:>7.3f} {adf_pval:>7.4f} {ic_str:>8} {valid_pts:>10}")
+
+print(f"\nROLLING_WINDOW={ROLLING_WINDOW}h, IC_THRESHOLD={IC_THRESHOLD}")
+print(f"Bars loaded per token: ~1000 (~41 days)")
+print(f"Need at least ROLLING_WINDOW + 124 bars = {ROLLING_WINDOW + 124} bars for IC to work")
