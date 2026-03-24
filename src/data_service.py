@@ -109,7 +109,7 @@ class DataService:
             all_rows.extend(rows)
             since = rows[-1][0] + 3_600_000  # advance to next candle
 
-            if len(rows) < batch_size:
+            if len(rows) == 0:
                 break
 
             time.sleep(self.exchange.rateLimit / 1_000)
