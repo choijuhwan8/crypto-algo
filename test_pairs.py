@@ -12,9 +12,22 @@ print("Warming up...")
 ds.warmup(tokens)
 
 all_pairs = list(itertools.combinations(tokens, 2))
-print(f"Testing {len(all_pairs)} pairs\n")
 
-fail_corr_price = fail_corr_return = fail_constant = fail_coint = fail_ic = passed = 0
+def compute_ic(log_a, log_b, beta, alpha, window=ROLLING_WINDOW, horizon=24):
+    spread = log_a - (alpha + beta * log_b)
+    win = min(window, len(spread))
+    spread_mean = spread.rolling(win).mean()
+    spread_std = spread.rolling(win).std()
+    zscore = (spread - spread_mean) / spread_std
+    future_ret = spread.shift(-horizon) - spread
+    valid = zscore.dropna().index.intersection(future_ret.dropna().index)
+    if len(valid) < 100:
+        return 0.0
+    ic = float(zscore.loc[valid].corr(future_ret.loc[valid]))
+    return ic if not np.isnan(ic) else 0.0
+
+print(f"\n{'Pair':<20} {'corr_p':>7} {'corr_r':>7} {'adf_p':>7} {'IC':>8} {'pass_ic':>8}")
+print("-" * 65)
 
 for tok_a, tok_b in all_pairs:
     df_a = ds.get_cache(tok_a)
@@ -30,44 +43,30 @@ for tok_a, tok_b in all_pairs:
     log_b = np.log(df_b.loc[common, "close"])
 
     corr_price = float(log_a.corr(log_b))
-    ret_a = log_a.diff().dropna()
-    ret_b = log_b.diff().dropna()
-    corr_return = float(ret_a.corr(ret_b))
+    corr_return = float(log_a.diff().dropna().corr(log_b.diff().dropna()))
 
     if np.isnan(corr_price) or corr_price < CORR_LOG_PRICE_MIN:
-        fail_corr_price += 1
         continue
-
     if np.isnan(corr_return) or corr_return < CORR_RETURN_MIN:
-        fail_corr_return += 1
         continue
-
     if log_b.nunique() < 2 or log_a.nunique() < 2:
-        fail_constant += 1
         continue
 
     slope, intercept, *_ = stats.linregress(log_b.values, log_a.values)
     spread = log_a.values - (intercept + slope * log_b.values)
     if len(set(spread)) < 2:
-        fail_constant += 1
         continue
 
     try:
-        adf_stat, adf_pval, *_ = adfuller(spread, maxlag=1, autolag=None)
+        _, adf_pval, *_ = adfuller(spread, maxlag=1, autolag=None)
     except Exception:
-        fail_constant += 1
         continue
 
     if adf_pval >= COINT_PVALUE_MAX:
-        fail_coint += 1
         continue
 
-    passed += 1
-    print(f"PASSED coint: {tok_a}-{tok_b} | corr_price={corr_price:.3f} corr_ret={corr_return:.3f} adf_p={adf_pval:.4f}")
+    ic = compute_ic(log_a, log_b, float(slope), float(intercept))
+    pass_ic = ic <= IC_THRESHOLD
+    print(f"{tok_a+'-'+tok_b:<20} {corr_price:>7.3f} {corr_return:>7.3f} {adf_pval:>7.4f} {ic:>8.4f} {'YES' if pass_ic else 'NO':>8}")
 
-print(f"\n--- Filter Summary ---")
-print(f"Failed corr_price (<{CORR_LOG_PRICE_MIN}): {fail_corr_price}")
-print(f"Failed corr_return (<{CORR_RETURN_MIN}):  {fail_corr_return}")
-print(f"Failed constant check:                    {fail_constant}")
-print(f"Failed cointegration (p>={COINT_PVALUE_MAX}):   {fail_coint}")
-print(f"Passed cointegration (before IC):         {passed}")
+print(f"\nIC_THRESHOLD = {IC_THRESHOLD} (pairs need IC <= this to pass)")
