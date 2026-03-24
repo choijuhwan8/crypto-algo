@@ -47,7 +47,14 @@ class DataService:
             }
         )
         if BINANCE_TESTNET:
-            self.exchange.set_sandbox_mode(True)
+            self.exchange.urls["api"].update({
+                "fapiPublic": "https://testnet.binancefuture.com/fapi/v1",
+                "fapiPublicV2": "https://testnet.binancefuture.com/fapi/v2",
+                "fapiPrivate": "https://testnet.binancefuture.com/fapi/v1",
+                "fapiPrivateV2": "https://testnet.binancefuture.com/fapi/v2",
+                "fapiPrivateV3": "https://testnet.binancefuture.com/fapi/v3",
+            })
+            self.exchange.options["fetchCurrencies"] = False
             logger.info("DataService: Binance testnet / sandbox enabled")
         else:
             logger.info("DataService: Binance MAINNET")

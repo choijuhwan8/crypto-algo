@@ -1,0 +1,14 @@
+[Unit]
+Description=Crypto Algo Bot
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/crypto-algo
+EnvironmentFile=/home/ubuntu/crypto-algo/.env
+ExecStart=/home/ubuntu/crypto-algo/venv/bin/python main.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
