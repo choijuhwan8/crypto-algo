@@ -148,7 +148,7 @@ class TelegramBot:
             stats = self.sig.get_stats(pk) if self.sig else {}
             z = stats.get("zscore", float("nan")) if stats else float("nan")
             lines.append(
-                f"`{pk}` {pos.direction}\n"
+                f"`{pk}` `{pos.direction}`\n"
                 f"  entry z={pos.entry_zscore:.2f} | now z={z:.2f} | "
                 f"pnl=${pos.pnl:+.2f}"
             )
