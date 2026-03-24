@@ -157,7 +157,7 @@ class PairSelector:
     ) -> float:
         """IC = corr(z-score_t, spread_return_{t+horizon})."""
         spread = log_a - (alpha + beta * log_b)
-        win = min(window, len(spread))
+        win = min(window, len(spread) // 4)
         spread_mean = spread.rolling(win).mean()
         spread_std = spread.rolling(win).std()
         zscore = (spread - spread_mean) / spread_std
