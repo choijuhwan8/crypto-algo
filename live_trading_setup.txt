@@ -1,0 +1,159 @@
+
+╔══════════════════════════════════════════════════════════════════╗
+║           BINANCE PERPETUAL FUTURES - LIVE TRADING SETUP         ║
+╚══════════════════════════════════════════════════════════════════╝
+
+RECOMMENDED PAIR: ANKR-ONT
+Backtest Sharpe: 0.46
+Win Rate: 60.0%
+Max Drawdown: -88.9%
+
+══════════════════════════════════════════════════════════════════
+BINANCE FUTURES API SETUP
+══════════════════════════════════════════════════════════════════
+
+1. Create Binance account
+2. Complete KYC verification
+3. Enable Futures trading
+4. Generate API key:
+   - Go to Account → API Management
+   - Create new key
+   - ✓ Enable Futures
+   - ✓ Enable Reading
+   - ✗ Disable Withdrawals (security!)
+   - Whitelist your IP
+
+══════════════════════════════════════════════════════════════════
+STRATEGY PARAMETERS
+══════════════════════════════════════════════════════════════════
+
+Regression Window: 4320 hours (6 months)
+Z-Entry Threshold: 1.0
+Z-Exit Threshold: 0.0
+Leverage: 5x
+Stop Loss: 20.0%
+
+══════════════════════════════════════════════════════════════════
+FEE STRUCTURE
+══════════════════════════════════════════════════════════════════
+
+VIP 0 (default):
+  Maker: 0.02%
+  Taker: 0.05%
+
+With BNB (-10%):
+  Maker: 0.018%
+  Taker: 0.045%  ⭐ USED IN BACKTEST
+
+💡 Keep ~$50 worth of BNB in futures wallet for discount!
+
+══════════════════════════════════════════════════════════════════
+POSITION SIZING (CRITICAL!)
+══════════════════════════════════════════════════════════════════
+
+Paper's live testing used $5-10 per pair initially.
+
+RECOMMENDED PROGRESSION:
+  Week 1-2: $25-50 per pair (test mode)
+  Week 3-4: $100-200 (if profitable)
+  Month 2+: Scale gradually to $500-1000
+
+⚠️  NEVER risk more than 2-5% of total capital per pair!
+⚠️  With 5x leverage, a 20% move = 100% of margin!
+
+══════════════════════════════════════════════════════════════════
+PYTHON CONNECTION CODE
+══════════════════════════════════════════════════════════════════
+
+import ccxt
+
+exchange = ccxt.binance({
+    'apiKey': 'YOUR_API_KEY',
+    'secret': 'YOUR_SECRET_KEY',
+    'options': {
+        'defaultType': 'future',  # USDT-M perpetual
+        'adjustForTimeDifference': True
+    }
+})
+
+# Set leverage (do this once per symbol)
+exchange.fapiPrivatePostLeverage({
+    'symbol': 'BANDUSDT',
+    'leverage': 5
+})
+
+# Check balance
+balance = exchange.fetch_balance()
+print(f"USDT: {balance['USDT']['free']:.2f}")
+
+══════════════════════════════════════════════════════════════════
+DAILY MONITORING CHECKLIST
+══════════════════════════════════════════════════════════════════
+
+□ Check current Z-score
+□ Verify open positions
+□ Check unrealized P&L
+□ Monitor funding rates (can be 0.01% per 8 hours!)
+□ Verify stop-loss is active
+□ Check correlation hasn't broken
+□ Ensure sufficient margin
+□ Review trade history
+
+══════════════════════════════════════════════════════════════════
+FUNDING RATES (IMPORTANT!)
+══════════════════════════════════════════════════════════════════
+
+⚠️  Perpetual futures charge funding every 8 hours!
+
+Typical range: -0.05% to +0.05% per 8 hours
+That's: -0.15% to +0.15% per day
+       -4.5% to +4.5% per month
+
+For pairs trading:
+  • You pay/receive on BOTH legs
+  • Can add up to significant cost
+  • Monitor on Binance Futures dashboard
+
+💡 This backtest does NOT include funding costs!
+
+══════════════════════════════════════════════════════════════════
+RISK WARNINGS
+══════════════════════════════════════════════════════════════════
+
+⚠️  Leverage amplifies both gains AND losses
+⚠️  Correlation can break during market crashes
+⚠️  Tokens can be delisted (see SXP case in paper)
+⚠️  Funding rates can eat into profits
+⚠️  Slippage during volatile periods
+⚠️  Exchange downtime / API failures
+⚠️  Past performance ≠ future results
+
+══════════════════════════════════════════════════════════════════
+PAPER'S LIVE RESULTS (Section 7)
+══════════════════════════════════════════════════════════════════
+
+Stage 1 (5 days): -34% (SXP delisting issue)
+Stage 2 (9 days): +4.67% recovery
+
+Key lesson: Have emergency stop procedures ready!
+
+══════════════════════════════════════════════════════════════════
+NEXT STEPS
+══════════════════════════════════════════════════════════════════
+
+1. ✓ Review backtest results
+2. □ Set up Binance Futures account
+3. □ Generate API keys (futures enabled)
+4. □ Buy small amount of BNB for fees
+5. □ Test with MINIMUM capital ($25-50)
+6. □ Monitor for 1-2 weeks
+7. □ Scale gradually if profitable
+8. □ Build monitoring dashboard
+9. □ Set up alerts (Telegram/email)
+
+══════════════════════════════════════════════════════════════════
+
+Good luck and trade responsibly! 🚀
+
+Read the paper's Section 7.5 and 8.2 carefully before going live.
+

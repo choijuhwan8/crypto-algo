@@ -1,0 +1,2 @@
+timestamp,run_id,source,stage,status,pairs_or_scope,window_days,split_ratio,fee_bps,sharpe,return_pct,max_dd_pct,trades,output_files,notes
+2026-03-24T00:00:00+08:00,init,pair_discovery_system.ipynb,setup,ready,top5,60,70:30,"4.5|5|10",,,,"","discovered_pairs.csv|backtest_results.csv|backtest_results_70_30_fee_sensitivity.csv","Initial tracker row; replace metrics per run"
