@@ -120,7 +120,7 @@ class PairSelector:
         # 2. Cointegration – OLS spread + ADF
         slope, intercept, *_ = stats.linregress(log_b.values, log_a.values)
         spread = log_a.values - (intercept + slope * log_b.values)
-        adf_stat, adf_pval, *_ = adfuller(spread, maxlags=1, autolag=None)
+        adf_stat, adf_pval, *_ = adfuller(spread, nlags=1, autolag=None)
 
         if adf_pval >= COINT_PVALUE_MAX:
             return None
