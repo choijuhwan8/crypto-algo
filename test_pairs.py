@@ -114,7 +114,7 @@ print(SEP)
 
 for tok_a, tok_b, log_a, log_b, slope, intercept, adf_pval in stage2_pass:
     spread = log_a - (intercept + slope * log_b)
-    win    = min(ROLLING_WINDOW, len(spread))
+    win    = min(ROLLING_WINDOW, len(spread) // 4)
     zscore = (spread - spread.rolling(win).mean()) / spread.rolling(win).std()
     future_ret = spread.shift(-24) - spread
 
