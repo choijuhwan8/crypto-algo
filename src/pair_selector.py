@@ -118,6 +118,8 @@ class PairSelector:
             return None
 
         # 2. Cointegration – OLS spread + ADF
+        if log_b.nunique() < 2:
+            return None
         slope, intercept, *_ = stats.linregress(log_b.values, log_a.values)
         spread = log_a.values - (intercept + slope * log_b.values)
         adf_stat, adf_pval, *_ = adfuller(spread, maxlag=1, autolag=None)
