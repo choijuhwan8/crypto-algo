@@ -74,18 +74,32 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
     new Chart(document.getElementById('ec'), {
       type: 'line',
       data: {
-        labels: {{ equity_labels|tojson }},
         datasets:[{
-          data: {{ equity_values|tojson }},
+          data: {{ equity_labels|tojson }}.map((ts, i) => ({ x: new Date(ts).getTime(), y: {{ equity_values|tojson }}[i] })),
           borderColor:'#7eb6ff', borderWidth:1.5,
           pointRadius:0, fill:true,
           backgroundColor:'rgba(126,182,255,0.08)'
         }]
       },
       options:{
-        plugins:{legend:{display:false}},
+        parsing: false,
+        plugins:{
+          legend:{display:false},
+          annotation:{annotations:{
+            initialLine:{
+              type:'line', yMin:{{ initial_capital }}, yMax:{{ initial_capital }},
+              borderColor:'rgba(255,255,255,0.2)', borderWidth:1, borderDash:[6,4],
+              label:{ display:true, content:'Initial ${{ "%,.0f"|format(initial_capital) }}',
+                position:'start', color:'#888', backgroundColor:'transparent', font:{size:10} }
+            }
+          }}
+        },
         scales:{
-          x:{ticks:{maxTicksLimit:8,color:'#555'},grid:{color:'#1e2130'}},
+          x:{
+            type:'time',
+            time:{ tooltipFormat:'MMM d HH:mm', displayFormats:{ hour:'MMM d HH:mm', day:'MMM d', minute:'HH:mm' }},
+            ticks:{maxTicksLimit:8,color:'#555'}, grid:{color:'#1e2130'}
+          },
           y:{ticks:{color:'#555'},grid:{color:'#1e2130'}}
         }
       }
@@ -532,6 +546,7 @@ def index():
         equity_labels += [p.get("ts", p.get("time", i)) for i, p in enumerate(pts)]
         equity_values += [p.get("equity", p.get("value", 0)) for p in pts]
 
+    from src.config import INITIAL_CAPITAL as IC
     return render_template_string(
         TEMPLATE,
         summary=summary,
@@ -541,6 +556,7 @@ def index():
         leverage=LEVERAGE,
         equity_labels=equity_labels,
         equity_values=equity_values,
+        initial_capital=IC,
     )
 
 

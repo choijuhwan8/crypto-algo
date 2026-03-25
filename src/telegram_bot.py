@@ -110,6 +110,7 @@ class TelegramBot:
             "/status": self._cmd_status,
             "/positions": self._cmd_positions,
             "/pnl": self._cmd_pnl,
+            "/upnl": self._cmd_upnl,
             "/pause": self._cmd_pause,
             "/resume": self._cmd_resume,
             "/closeall": self._cmd_closeall,
@@ -169,6 +170,39 @@ class TelegramBot:
         )
         await self.send(msg)
 
+    async def _cmd_upnl(self) -> None:
+        positions = self.state.get_open_positions()
+        if not positions:
+            await self.send("No open positions.")
+            return
+        lines = ["*Live Unrealised PnL*"]
+        total = 0.0
+        for pos in positions.values():
+            # Fetch live price from Binance
+            import urllib.request, json as _json
+            try:
+                url_a = f"https://fapi.binance.com/fapi/v1/ticker/price?symbol={pos.sym_a}USDT"
+                url_b = f"https://fapi.binance.com/fapi/v1/ticker/price?symbol={pos.sym_b}USDT"
+                pa = float(_json.loads(urllib.request.urlopen(url_a, timeout=5).read())["price"])
+                pb = float(_json.loads(urllib.request.urlopen(url_b, timeout=5).read())["price"])
+                if pos.direction == "LONG_SPREAD":
+                    pnl_a = pos.notional_a * (pa - pos.entry_price_a) / pos.entry_price_a
+                    pnl_b = pos.notional_b * (pos.entry_price_b - pb) / pos.entry_price_b
+                else:
+                    pnl_a = pos.notional_a * (pos.entry_price_a - pa) / pos.entry_price_a
+                    pnl_b = pos.notional_b * (pb - pos.entry_price_b) / pos.entry_price_b
+                upnl = pnl_a + pnl_b
+                total += upnl
+                icon = "🟢" if upnl >= 0 else "🔴"
+                lines.append(
+                    f"{icon} `{pos.pair_key}` `{pos.direction}`\n"
+                    f"  Leg A: `${pnl_a:+.2f}` | Leg B: `${pnl_b:+.2f}` | Total: `${upnl:+.2f}`"
+                )
+            except Exception as exc:
+                lines.append(f"`{pos.pair_key}` — price fetch failed: {exc}")
+        lines.append(f"\n*Total uPnL: `${total:+.2f}`*")
+        await self.send("\n".join(lines))
+
     async def _cmd_pause(self) -> None:
         self.risk.pause()
         await self.send("Bot *PAUSED*.  Use /resume to restart.")
@@ -196,6 +230,7 @@ class TelegramBot:
             "/status    – bot status\n"
             "/positions – open positions\n"
             "/pnl       – P&L summary\n"
+            "/upnl      – live unrealised PnL (real-time)\n"
             "/pause     – pause trading\n"
             "/resume    – resume trading\n"
             "/closeall  – close all positions\n"
