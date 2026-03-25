@@ -20,27 +20,33 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3/dist/chartjs-plugin-annotation.min.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:system-ui,sans-serif;background:#0f1117;color:#e0e0e0;padding:20px}
-  h1{font-size:1.4rem;margin-bottom:16px;color:#fff}
+  body{font-family:system-ui,sans-serif;background:#0f1117;color:#e0e0e0;padding:16px}
+  h1{font-size:1.3rem;margin-bottom:16px;color:#fff}
   h2{font-size:.85rem;text-transform:uppercase;color:#aaa;margin-bottom:10px}
-  .cards{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}
-  .card{background:#1a1d27;border-radius:8px;padding:16px 24px;min-width:140px;flex:1}
+  .cards{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px}
+  .card{background:#1a1d27;border-radius:8px;padding:14px 18px;min-width:120px;flex:1}
   .card .label{font-size:.7rem;text-transform:uppercase;color:#888;margin-bottom:4px}
-  .card .value{font-size:1.6rem;font-weight:700}
+  .card .value{font-size:1.4rem;font-weight:700}
   .pos{color:#26c17c} .neg{color:#e05252} .neu{color:#7eb6ff}
-  .chart-box{background:#1a1d27;border-radius:8px;padding:16px;margin-bottom:24px}
+  .chart-box{background:#1a1d27;border-radius:8px;padding:16px;margin-bottom:20px}
   .chart-box h2{font-size:.85rem;color:#aaa;margin-bottom:12px;text-transform:uppercase}
-  .charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:16px;margin-bottom:24px}
-  table{width:100%;border-collapse:collapse;background:#1a1d27;border-radius:8px;overflow:hidden;margin-bottom:24px}
-  th{background:#12151e;font-size:.7rem;text-transform:uppercase;color:#888;padding:8px 12px;text-align:left}
-  td{padding:7px 12px;font-size:.8rem;border-top:1px solid #252836}
+  .charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:20px}
+  .table-wrap{width:100%;overflow-x:auto;margin-bottom:20px}
+  table{width:100%;border-collapse:collapse;background:#1a1d27;border-radius:8px;overflow:hidden;min-width:700px}
+  th{background:#12151e;font-size:.65rem;text-transform:uppercase;color:#888;padding:8px 10px;text-align:left;white-space:nowrap}
+  td{padding:6px 10px;font-size:.78rem;border-top:1px solid #252836}
   tr:hover td{background:#20243a}
-  .no-data{color:#888;font-style:italic;padding:20px 0;margin-bottom:24px}
+  .no-data{color:#888;font-style:italic;padding:20px 0;margin-bottom:20px}
   .live-price{font-weight:700;font-size:.9rem}
   .badge{font-size:.65rem;padding:2px 6px;border-radius:4px;background:#252836;color:#aaa;margin-left:4px}
-  .tf-btns{display:flex;gap:6px;margin-bottom:12px}
-  .tf-btn{background:#1a1d27;border:1px solid #252836;color:#aaa;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:.75rem}
+  .tf-btns{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+  .tf-btn{background:#1a1d27;border:1px solid #252836;color:#aaa;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:.75rem}
   .tf-btn.active,.tf-btn:hover{background:#7eb6ff;color:#0f1117;border-color:#7eb6ff}
+  @media(max-width:600px){
+    body{padding:10px}
+    .card .value{font-size:1.1rem}
+    .charts-grid{grid-template-columns:1fr}
+  }
 </style>
 </head><body>
 <h1>Crypto Paper Trading — Dashboard
@@ -126,7 +132,7 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
   <button class="tf-btn" data-tf="1w">1 week</button>
   <button class="tf-btn" data-tf="1M">1 month</button>
 </div>
-<table>
+<div class="table-wrap"><table>
   <thead><tr>
     <th></th>
     <th>Pair</th><th>Direction</th>
@@ -174,7 +180,7 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
   {# Row 2: capital / exposure / timing #}
   <tr class="pos-row" onclick="toggleCharts('charts-{{ loop.index }}')" style="cursor:pointer;background:#161922">
     <td colspan="2" style="font-size:.72rem;color:#888">
-      Opened: {{ p.get('entry_time','—')[:19] }} &nbsp;|&nbsp; Updated: {{ p.get('last_updated','—')[:19] if p.get('last_updated') else '—' }}
+      Opened: {{ p.get('entry_time_sgt','—') }} &nbsp;|&nbsp; Updated: {{ p.get('last_updated_sgt','—') }}
     </td>
     <td colspan="2" style="font-size:.72rem;color:#aaa">
       Capital: <span class="neu">${{ "%.0f"|format(notl_a) }}</span> + <span class="neu">${{ "%.0f"|format(notl_b) }}</span>
@@ -217,16 +223,16 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
   </tr>
   {% endfor %}
   </tbody>
-</table>
+</table></div>
 {% else %}
 <p class="no-data">No open positions.</p>
 {% endif %}
 
 <h2>Recent Trades (last 20)</h2>
 {% if trades %}
-<table>
+<div class="table-wrap"><table>
   <thead><tr>
-    <th>Pair</th><th>Direction</th><th>Entry Z</th><th>PnL</th><th>Reason</th><th>Opened</th><th>Closed</th>
+    <th>Pair</th><th>Direction</th><th>Entry Z</th><th>PnL</th><th>Reason</th><th>Opened (SGT)</th><th>Closed (SGT)</th>
   </tr></thead>
   <tbody>
   {% for t in trades|reverse %}
@@ -237,12 +243,12 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
     <td class="{{ 'pos' if t.get('realized_pnl',0)>=0 else 'neg' }}">
       ${{ "%.2f"|format(t.get('realized_pnl',0)) }}</td>
     <td>{{ t.get('reason','—') }}</td>
-    <td>{{ t.get('entry_time','—')[:19] }}</td>
-    <td>{{ t.get('exit_time','—')[:19] }}</td>
+    <td>{{ t.get('entry_time_sgt','—') }}</td>
+    <td>{{ t.get('exit_time_sgt','—') }}</td>
   </tr>
   {% endfor %}
   </tbody>
-</table>
+</table></div>
 {% else %}
 <p class="no-data">No closed trades yet.</p>
 {% endif %}
@@ -551,6 +557,28 @@ def index():
     else:
         summary, trades, open_positions = None, None, []
         LEVERAGE = 3
+
+    # Convert UTC ISO timestamps to SGT (UTC+8) for display
+    from datetime import timedelta
+    def to_sgt(ts):
+        if not ts:
+            return '—'
+        try:
+            from datetime import datetime, timezone
+            dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+            sgt = dt + timedelta(hours=8)
+            return sgt.strftime('%Y-%m-%d %H:%M')
+        except Exception:
+            return ts[:19]
+
+    for p in open_positions:
+        p['entry_time_sgt'] = to_sgt(p.get('entry_time'))
+        p['last_updated_sgt'] = to_sgt(p.get('last_updated'))
+
+    if trades:
+        for t in trades:
+            t['entry_time_sgt'] = to_sgt(t.get('entry_time'))
+            t['exit_time_sgt'] = to_sgt(t.get('exit_time'))
 
     # Collect unique symbols from open positions dynamically
     active_symbols = list(dict.fromkeys(
