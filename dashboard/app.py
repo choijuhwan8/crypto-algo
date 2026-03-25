@@ -1,9 +1,10 @@
 import json, os
 from pathlib import Path
-from flask import Flask, render_template_string, jsonify
+from flask import Flask, render_template_string, jsonify, send_from_directory
 import urllib.request
 
-app = Flask(__name__)
+FRONTEND_DIST = Path(__file__).parent / "frontend" / "dist"
+app = Flask(__name__, static_folder=str(FRONTEND_DIST), static_url_path="")
 BASE = Path(__file__).parent.parent / "data"
 
 def load_json(name):
@@ -629,6 +630,60 @@ def index():
         equity_values=equity_values,
         initial_capital=IC,
     )
+
+
+@app.route("/api/state")
+def api_state():
+    """Return full bot state for the React frontend."""
+    state = load_json("state.json")
+    equity_data = load_json("equity_curve.json") or []
+
+    if not state:
+        return jsonify({
+            "summary": None,
+            "open_positions": [],
+            "closed_positions": [],
+            "equity_curve": [],
+        })
+
+    from src.config import INITIAL_CAPITAL, LEVERAGE
+
+    equity = state.get("equity", INITIAL_CAPITAL)
+    peak = state.get("peak_equity", equity)
+    closed = state.get("closed_positions") or []
+    n = len(closed)
+    wins = sum(1 for t in closed if t.get("realized_pnl", 0) > 0)
+
+    summary = {
+        "equity": round(equity, 2),
+        "initial_capital": INITIAL_CAPITAL,
+        "total_return_pct": round((equity - INITIAL_CAPITAL) / INITIAL_CAPITAL * 100, 2),
+        "drawdown_pct": round((peak - equity) / peak * 100, 2) if peak else 0.0,
+        "win_rate": round(wins / n * 100, 1) if n else 0.0,
+        "total_trades": n,
+        "peak_equity": round(peak, 2),
+        "total_fees": round(state.get("total_fees", 0), 2),
+    }
+
+    # Seed equity curve with initial capital point
+    start_ts = (equity_data[0].get("ts") if equity_data else None) or state.get("saved_at", "")
+    equity_curve = [{"ts": start_ts, "equity": INITIAL_CAPITAL}] + equity_data[-500:]
+
+    return jsonify({
+        "summary": summary,
+        "open_positions": state.get("open_positions") or [],
+        "closed_positions": closed[-20:],
+        "equity_curve": equity_curve,
+    })
+
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_react(path):
+    """Serve React app — fall back to index.html for client-side routing."""
+    if path and (FRONTEND_DIST / path).exists():
+        return send_from_directory(str(FRONTEND_DIST), path)
+    return send_from_directory(str(FRONTEND_DIST), "index.html")
 
 
 if __name__ == "__main__":
