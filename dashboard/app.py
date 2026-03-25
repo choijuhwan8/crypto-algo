@@ -131,29 +131,34 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
     <th></th>
     <th>Pair</th><th>Direction</th>
     <th>Entry Z</th><th>Current Z</th>
-    <th>Entry Price A</th><th>Live Price A</th><th>Leg A PnL</th>
-    <th>Entry Price B</th><th>Live Price B</th><th>Leg B PnL</th>
-    <th>Notional</th><th>Leverage</th><th>Total uPnL</th>
-    <th>Stop Loss</th><th>Exit Target</th>
-    <th>Opened</th><th>Last Updated</th>
+    <th>Entry A</th><th>Live A</th><th>Leg A PnL</th>
+    <th>Entry B</th><th>Live B</th><th>Leg B PnL</th>
+    <th>Total uPnL</th><th>Stop Loss</th><th>Exit Target</th>
   </tr></thead>
   <tbody>
   {% for p in open_positions %}
   {% set pair_key = p.get('pair_key','') %}
   {% set direction = p.get('direction','') %}
-  {% set sl_pnl = -(p.get('notional_a',0) + p.get('notional_b',0)) * 0.15 %}
+  {% set notl_a = p.get('notional_a',0) %}
+  {% set notl_b = p.get('notional_b',0) %}
+  {% set sl_pnl = -(notl_a + notl_b) * 0.15 %}
+  {% set exposure_a = notl_a * leverage %}
+  {% set exposure_b = notl_b * leverage %}
+  {# Row 1: price / PnL / z-score #}
   <tr class="pos-row" onclick="toggleCharts('charts-{{ loop.index }}')" style="cursor:pointer"
     data-sym-a="{{ p.get('sym_a','') }}"
     data-sym-b="{{ p.get('sym_b','') }}"
     data-entry-a="{{ p.get('entry_price_a',0) }}"
     data-entry-b="{{ p.get('entry_price_b',0) }}"
-    data-notional-a="{{ p.get('notional_a',0) }}"
-    data-notional-b="{{ p.get('notional_b',0) }}"
+    data-notional-a="{{ notl_a }}"
+    data-notional-b="{{ notl_b }}"
     data-direction="{{ direction }}"
     data-idx="{{ loop.index }}">
-    <td style="color:#555;font-size:.7rem">▶</td>
-    <td>{{ p.get('pair_key','—') }}</td>
-    <td>{{ p.get('direction','—') }}</td>
+    <td rowspan="2" style="color:#555;font-size:.7rem;vertical-align:middle" id="arrow-{{ loop.index }}">▶</td>
+    <td rowspan="2" style="vertical-align:middle;font-weight:600">{{ pair_key }}</td>
+    <td rowspan="2" style="vertical-align:middle">
+      <span class="badge {{ 'pos' if 'LONG' in direction else 'neg' }}">{{ direction }}</span>
+    </td>
     <td>{{ "%.2f"|format(p.get('entry_zscore',0)) }}</td>
     <td>{{ "%.2f"|format(p.get('current_zscore',0)) if p.get('current_zscore') is not none else '—' }}</td>
     <td>${{ "%.4f"|format(p.get('entry_price_a',0)) }}</td>
@@ -162,16 +167,32 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
     <td>${{ "%.4f"|format(p.get('entry_price_b',0)) }}</td>
     <td class="neu" id="live-b-{{ p.get('sym_b','') }}">${{ "%.4f"|format(p.get('current_price_b',0)) if p.get('current_price_b') else '—' }}</td>
     <td class="{{ 'pos' if p.get('pnl_b',0)>=0 else 'neg' }}" id="pnl-b-{{ loop.index }}">{{ "$%.2f"|format(p.get('pnl_b',0)) if p.get('pnl_b') is not none else '—' }}</td>
-    <td>${{ "%.2f"|format(p.get('notional_a',0)) }}</td>
-    <td class="neu">{{ leverage }}x</td>
     <td class="{{ 'pos' if p.get('pnl',0)>=0 else 'neg' }}" id="pnl-total-{{ loop.index }}">${{ "%.2f"|format(p.get('pnl',0)) }}</td>
     <td class="neg">${{ "%.2f"|format(sl_pnl) }}</td>
     <td class="neu">z → 0.0</td>
-    <td>{{ p.get('entry_time','—')[:19] }}</td>
-    <td>{{ p.get('last_updated','—')[:19] if p.get('last_updated') else '—' }}</td>
+  </tr>
+  {# Row 2: capital / exposure / timing #}
+  <tr class="pos-row" onclick="toggleCharts('charts-{{ loop.index }}')" style="cursor:pointer;background:#161922">
+    <td colspan="2" style="font-size:.72rem;color:#888">
+      Opened: {{ p.get('entry_time','—')[:19] }} &nbsp;|&nbsp; Updated: {{ p.get('last_updated','—')[:19] if p.get('last_updated') else '—' }}
+    </td>
+    <td colspan="2" style="font-size:.72rem;color:#aaa">
+      Capital: <span class="neu">${{ "%.0f"|format(notl_a) }}</span> + <span class="neu">${{ "%.0f"|format(notl_b) }}</span>
+      = <span class="neu">${{ "%.0f"|format(notl_a + notl_b) }}</span>
+    </td>
+    <td colspan="2" style="font-size:.72rem;color:#aaa">
+      Exposure ({{ leverage }}x): <span class="neu">${{ "%.0f"|format(exposure_a) }}</span> + <span class="neu">${{ "%.0f"|format(exposure_b) }}</span>
+      = <span class="neu">${{ "%.0f"|format(exposure_a + exposure_b) }}</span>
+    </td>
+    <td colspan="3" style="font-size:.72rem;color:#aaa">
+      Leg A: <span class="{{ 'pos' if 'LONG' in direction else 'neg' }}">{{ 'LONG' if 'LONG' in direction else 'SHORT' }}</span>
+      &nbsp;|&nbsp;
+      Leg B: <span class="{{ 'neg' if 'LONG' in direction else 'pos' }}">{{ 'SHORT' if 'LONG' in direction else 'LONG' }}</span>
+      &nbsp;|&nbsp; Stop loss: -15% of capital
+    </td>
   </tr>
   <tr id="charts-{{ loop.index }}" style="display:none">
-    <td colspan="18" style="padding:16px;background:#12151e">
+    <td colspan="14" style="padding:16px;background:#12151e">
       <div class="charts-grid">
         {% for leg in ['a','b'] %}
           {% set sym = p.get('sym_'+leg) %}
@@ -230,19 +251,19 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
 <script>
 function toggleCharts(rowId) {
   const row = document.getElementById(rowId);
-  const posRow = row.previousElementSibling;
-  const arrow = posRow.querySelector('td:first-child');
+  // Extract index from rowId e.g. "charts-1" → "1"
+  const idx = rowId.split('-')[1];
+  const arrow = document.getElementById('arrow-' + idx);
   if (row.style.display === 'none') {
     row.style.display = '';
-    arrow.textContent = '▼';
-    // Trigger chart init for newly visible canvases
+    if (arrow) arrow.textContent = '▼';
     row.querySelectorAll('canvas[data-sym]').forEach(canvas => {
       if (!registry[canvas.id]) initChart(canvas);
       loadHistory(canvas.id, activeWindow);
     });
   } else {
     row.style.display = 'none';
-    arrow.textContent = '▶';
+    if (arrow) arrow.textContent = '▶';
   }
 }
 
