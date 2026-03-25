@@ -47,7 +47,7 @@ export function PriceChart({ sym, entryPrice, legDir, livePrice, timeframe }: Pr
               entryLine: {
                 type: 'line', yMin: entryPrice, yMax: entryPrice,
                 borderColor: '#f5a623', borderWidth: 1.5, borderDash: [6, 3],
-                label: { display: true, content: `Entry $${entryPrice.toPrecision(5)}`, position: 'start', color: '#f5a623', backgroundColor: 'rgba(245,166,35,0.15)', font: { size: 10 } },
+                label: { display: true, content: `Entry $${entryPrice.toPrecision(5)}`, position: 'end', color: '#f5a623', backgroundColor: 'rgba(245,166,35,0.15)', font: { size: 10 } },
               },
               currentLine: {
                 type: 'line', yMin: 0, yMax: 0,

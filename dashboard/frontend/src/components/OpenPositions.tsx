@@ -74,11 +74,11 @@ function PositionRow({ pos, prices, tf }: { pos: Position; prices: Record<string
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3 text-sm">
           <div>
             <p className="text-[0.65rem] text-[#888] uppercase">Entry Z</p>
-            <p className="text-[#7eb6ff] font-mono">{pos.entry_zscore.toFixed(2)}</p>
+            <p className="text-[#e0c070] font-mono">{pos.entry_zscore.toFixed(2)}</p>
           </div>
           <div>
             <p className="text-[0.65rem] text-[#888] uppercase">Current Z</p>
-            <p className="text-[#7eb6ff] font-mono">{pos.current_zscore != null ? pos.current_zscore.toFixed(2) : '—'}</p>
+            <p className="text-[#e0c070] font-mono">{pos.current_zscore != null ? pos.current_zscore.toFixed(2) : '—'}</p>
           </div>
           <div>
             <p className="text-[0.65rem] text-[#888] uppercase">Stop Loss</p>
@@ -86,7 +86,7 @@ function PositionRow({ pos, prices, tf }: { pos: Position; prices: Record<string
           </div>
           <div>
             <p className="text-[0.65rem] text-[#888] uppercase">Exit Target</p>
-            <p className="text-[#7eb6ff] font-mono">z → 0.0</p>
+            <p className="text-[#e0c070] font-mono">z → 0.0</p>
           </div>
         </div>
 
@@ -94,19 +94,19 @@ function PositionRow({ pos, prices, tf }: { pos: Position; prices: Record<string
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
           {([['a', pos.sym_a, pos.entry_price_a, liveA, pnlA, legADir], ['b', pos.sym_b, pos.entry_price_b, liveB, pnlB, legBDir]] as const).map(
             ([leg, sym, entryP, liveP, pnl, dir]) => (
-              <div key={leg} className="bg-[#12151e] rounded-lg p-3">
+              <div key={leg} className="bg-[#1a1d27] rounded-lg p-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-white font-medium text-sm">{sym}/USDT</span>
                   {badge(dir as string, dir === 'LONG')}
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div>
-                    <p className="text-[#888] mb-0.5">Entry</p>
-                    <p className="text-[#aaa] font-mono">{fmtPrice(entryP)}</p>
+                    <p className="text-[#888] mb-0.5">Entry Price</p>
+                    <p className="text-[#e0c070] font-mono">{fmtPrice(entryP)}</p>
                   </div>
                   <div>
-                    <p className="text-[#888] mb-0.5">Live</p>
-                    <p className="text-[#7eb6ff] font-mono">{fmtPrice(liveP)}</p>
+                    <p className="text-[#888] mb-0.5">Current Price</p>
+                    <p className="text-[#e0c070] font-mono">{fmtPrice(liveP)}</p>
                   </div>
                   <div>
                     <p className="text-[#888] mb-0.5">PnL</p>
@@ -119,9 +119,8 @@ function PositionRow({ pos, prices, tf }: { pos: Position; prices: Record<string
         </div>
 
         {/* Capital info */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-[#888] mb-3">
-          <p>Capital: <span className="text-[#7eb6ff]">${pos.notional_a.toFixed(0)} + ${pos.notional_b.toFixed(0)} = ${capitalTotal.toFixed(0)}</span></p>
-          <p>Exposure ({LEVERAGE}x): <span className="text-[#7eb6ff]">${exposureA.toFixed(0)} + ${exposureB.toFixed(0)} = ${(exposureA + exposureB).toFixed(0)}</span></p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-[#888] mb-3">
+          <p>Capital: <span className="text-[#e0c070]">${pos.notional_a.toFixed(0)} + ${pos.notional_b.toFixed(0)} = ${capitalTotal.toFixed(0)}</span></p>
           <p>Stop loss: <span className="text-[#e05252]">-15% of capital</span></p>
         </div>
 
