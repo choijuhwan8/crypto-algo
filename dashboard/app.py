@@ -93,6 +93,30 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
 </div>
 
 <h2 style="font-size:.85rem;text-transform:uppercase;color:#aaa;margin-bottom:10px">
+  Open Positions</h2>
+{% if open_positions %}
+<table style="margin-bottom:24px">
+  <thead><tr>
+    <th>Pair</th><th>Direction</th><th>Entry Z</th><th>Notional</th><th>Unrealised PnL</th><th>Opened</th>
+  </tr></thead>
+  <tbody>
+  {% for p in open_positions %}
+  <tr>
+    <td>{{ p.get('pair_key','—') }}</td>
+    <td>{{ p.get('direction','—') }}</td>
+    <td>{{ "%.2f"|format(p.get('entry_zscore',0)) }}</td>
+    <td>${{ "%.2f"|format(p.get('notional_a',0)) }}</td>
+    <td class="{{ 'pos' if p.get('pnl',0)>=0 else 'neg' }}">${{ "%.2f"|format(p.get('pnl',0)) }}</td>
+    <td>{{ p.get('entry_time','—')[:19] }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="no-data" style="margin-bottom:24px">No open positions.</p>
+{% endif %}
+
+<h2 style="font-size:.85rem;text-transform:uppercase;color:#aaa;margin-bottom:10px">
   Recent Trades (last 20)</h2>
 {% if trades %}
 <table>
@@ -127,6 +151,7 @@ def index():
     if state:
         closed = (state.get("closed_positions") or [])[-20:]
         trades = closed
+        open_positions = state.get("open_positions") or []
         # Build summary from state fields directly
         from src.config import INITIAL_CAPITAL
         equity = state.get("equity", INITIAL_CAPITAL)
@@ -142,7 +167,7 @@ def index():
             "total_trades": n,
         }
     else:
-        summary, trades = None, None
+        summary, trades, open_positions = None, None, []
 
     equity_labels, equity_values = [], []
     if equity_data:
@@ -154,6 +179,7 @@ def index():
         TEMPLATE,
         summary=summary,
         trades=trades,
+        open_positions=open_positions,
         equity_labels=equity_labels,
         equity_values=equity_values,
     )
