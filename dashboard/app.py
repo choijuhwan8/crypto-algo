@@ -73,7 +73,10 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
 {% endif %}
 
 <div class="chart-box">
-  <h2>Equity Curve</h2>
+  <h2 onclick="toggleEc()" style="cursor:pointer;user-select:none">
+    Equity Curve <span id="ec-arrow" style="font-size:.75rem;color:#555">▼</span>
+  </h2>
+  <div id="ec-body">
   {% if equity_labels %}
   <canvas id="ec" height="80"></canvas>
   <script>
@@ -119,7 +122,21 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
   {% else %}
   <p class="no-data">No equity curve data yet.</p>
   {% endif %}
+  </div>
 </div>
+<script>
+function toggleEc() {
+  var body = document.getElementById('ec-body');
+  var arrow = document.getElementById('ec-arrow');
+  if (body.style.display === 'none') {
+    body.style.display = '';
+    arrow.textContent = '▼';
+  } else {
+    body.style.display = 'none';
+    arrow.textContent = '▶';
+  }
+}
+</script>
 
 <h2>Open Positions</h2>
 {% if open_positions %}
