@@ -101,7 +101,7 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
     <th>Entry Z</th><th>Current Z</th>
     <th>Entry Price A</th><th>Current Price A</th>
     <th>Entry Price B</th><th>Current Price B</th>
-    <th>Notional</th><th>Unrealised PnL</th>
+    <th>Notional</th><th>Leverage</th><th>Unrealised PnL</th>
     <th>Stop Loss</th><th>Exit Target</th>
     <th>Opened</th><th>Last Updated</th>
   </tr></thead>
@@ -118,6 +118,7 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
     <td>${{ "%.4f"|format(p.get('entry_price_b',0)) }}</td>
     <td>{{ "$%.4f"|format(p.get('current_price_b',0)) if p.get('current_price_b') is not none else '—' }}</td>
     <td>${{ "%.2f"|format(p.get('notional_a',0)) }}</td>
+    <td class="neu">{{ leverage }}x</td>
     <td class="{{ 'pos' if p.get('pnl',0)>=0 else 'neg' }}">${{ "%.2f"|format(p.get('pnl',0)) }}</td>
     <td class="neg">${{ "%.2f"|format(sl_pnl) }}</td>
     <td class="neu">z → 0.0</td>
@@ -168,10 +169,9 @@ def index():
         trades = closed
         open_positions = state.get("open_positions") or []
         # Build summary from state fields directly
-        from src.config import INITIAL_CAPITAL
+        from src.config import INITIAL_CAPITAL, LEVERAGE
         equity = state.get("equity", INITIAL_CAPITAL)
         peak = state.get("peak_equity", equity)
-        fees = state.get("total_fees", 0.0)
         n = len(state.get("closed_positions") or [])
         wins = sum(1 for t in (state.get("closed_positions") or []) if t.get("realized_pnl", 0) > 0)
         summary = {
@@ -183,6 +183,7 @@ def index():
         }
     else:
         summary, trades, open_positions = None, None, []
+        LEVERAGE = 3
 
     equity_labels, equity_values = [], []
     if equity_data:
@@ -195,6 +196,7 @@ def index():
         summary=summary,
         trades=trades,
         open_positions=open_positions,
+        leverage=LEVERAGE,
         equity_labels=equity_labels,
         equity_values=equity_values,
     )
