@@ -16,6 +16,7 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
 <meta charset="utf-8">
 <title>Crypto Bot Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3/dist/chartjs-plugin-annotation.min.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:system-ui,sans-serif;background:#0f1117;color:#e0e0e0;padding:20px}
@@ -104,11 +105,25 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
 </div>
 <div class="charts-grid">
   {% for sym in active_symbols %}
+  {% set pos = open_positions|selectattr('sym_a','equalto',sym)|first|default(None) %}
+  {% if pos is none %}{% set pos = open_positions|selectattr('sym_b','equalto',sym)|first|default(None) %}{% endif %}
+  {% if pos %}
+    {% set is_a = pos.get('sym_a') == sym %}
+    {% set entry_price = pos.get('entry_price_a') if is_a else pos.get('entry_price_b') %}
+    {% set direction = pos.get('direction','') %}
+    {% set leg_dir = ('LONG' if (direction=='LONG_SPREAD' and is_a) or (direction=='SHORT_SPREAD' and not is_a) else 'SHORT') %}
+  {% else %}
+    {% set entry_price = None %}{% set leg_dir = '' %}
+  {% endif %}
   <div class="chart-box">
     <h2>{{ sym }}/USDT
       <span class="live-price neu" id="price-{{ sym }}">loading...</span>
+      {% if leg_dir %}<span class="badge {{ 'pos' if leg_dir=='LONG' else 'neg' }}">{{ leg_dir }}</span>{% endif %}
     </h2>
-    <canvas id="chart-{{ sym }}" height="120"></canvas>
+    <canvas id="chart-{{ sym }}" height="120"
+      data-entry="{{ entry_price or '' }}"
+      data-dir="{{ leg_dir }}">
+    </canvas>
   </div>
   {% endfor %}
 </div>
@@ -205,14 +220,85 @@ function updateChart(sym) {
   const data = pts.map(p => p.price);
   charts[sym].data.labels = labels;
   charts[sym].data.datasets[0].data = data;
+
+  // Update current price annotation
+  if (data.length > 0) {
+    const cur = data[data.length - 1];
+    const ann = charts[sym].options.plugins.annotation.annotations;
+    ann.currentLine.yMin = cur;
+    ann.currentLine.yMax = cur;
+    ann.currentLine.label.display = true;
+    ann.currentLine.label.content = 'Now $' + cur.toPrecision(5);
+
+    // Set entry marker at first visible point index
+    if (pts.length > 0) {
+      ann.entryMarker.xMin = labels[0];
+      ann.entryMarker.xMax = labels[0];
+    }
+  }
+
   charts[sym].update();
 }
+
+// Build per-symbol position metadata from canvas data attributes
+const symMeta = {};
+symbols.forEach(sym => {
+  const canvas = document.getElementById('chart-' + sym);
+  if (!canvas) return;
+  const entry = parseFloat(canvas.dataset.entry);
+  const dir = canvas.dataset.dir;
+  symMeta[sym] = { entry: isNaN(entry) ? null : entry, dir };
+});
 
 // Init charts
 symbols.forEach((sym, i) => {
   priceHistory[sym] = [];
   const ctx = document.getElementById('chart-' + sym);
   if (!ctx) return;
+  const meta = symMeta[sym] || {};
+  const entryPrice = meta.entry;
+  const legDir = meta.dir;
+
+  const annotations = {};
+
+  // Horizontal entry price line
+  if (entryPrice) {
+    annotations.entryLine = {
+      type: 'line', yMin: entryPrice, yMax: entryPrice,
+      borderColor: '#f5a623', borderWidth: 1.5, borderDash: [6, 3],
+      label: {
+        display: true,
+        content: 'Entry $' + entryPrice.toPrecision(5),
+        position: 'start', color: '#f5a623',
+        backgroundColor: 'rgba(245,166,35,0.15)', font: { size: 10 }
+      }
+    };
+  }
+
+  // Current price horizontal line (updated dynamically)
+  annotations.currentLine = {
+    type: 'line', yMin: 0, yMax: 0,
+    borderColor: legDir === 'LONG' ? '#26c17c' : '#e05252',
+    borderWidth: 1, borderDash: [3, 3],
+    label: {
+      display: false, content: 'Current',
+      position: 'end', color: '#aaa',
+      backgroundColor: 'rgba(0,0,0,0.4)', font: { size: 10 }
+    }
+  };
+
+  // Position entry marker (vertical line at first data point — added when data arrives)
+  annotations.entryMarker = {
+    type: 'line', xMin: null, xMax: null,
+    borderColor: '#ffffff33', borderWidth: 1, borderDash: [4, 4],
+    label: {
+      display: entryPrice != null,
+      content: (legDir || '') + ' entry',
+      position: 'start', color: '#fff',
+      backgroundColor: 'rgba(0,0,0,0.5)', font: { size: 10 }
+    }
+  };
+
   charts[sym] = new Chart(ctx, {
     type: 'line',
     data: { labels: [], datasets: [{ label: sym, data: [],
@@ -220,7 +306,10 @@ symbols.forEach((sym, i) => {
       pointRadius: 0, fill: false }] },
     options: {
       animation: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        annotation: { annotations }
+      },
       scales: {
         x: { ticks: { maxTicksLimit: 8, color: '#555' }, grid: { color: '#1e2130' } },
         y: { ticks: { color: '#555' }, grid: { color: '#1e2130' } }
