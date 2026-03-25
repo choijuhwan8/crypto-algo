@@ -16,6 +16,7 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
 <meta charset="utf-8">
 <title>Crypto Bot Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3/dist/chartjs-plugin-annotation.min.js"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
@@ -236,14 +237,26 @@ document.querySelectorAll('canvas[data-sym]').forEach((canvas, i) => {
 
   const chart = new Chart(canvas, {
     type: 'line',
-    data: { labels: [], datasets: [{ data: [],
+    data: { datasets: [{ data: [],
       borderColor: COLORS[i % COLORS.length], borderWidth: 1.5,
       pointRadius: 0, fill: false }] },
     options: {
       animation: false,
+      parsing: false,
       plugins: { legend: { display: false }, annotation: { annotations } },
       scales: {
-        x: { ticks: { maxTicksLimit: 8, color: '#555' }, grid: { color: '#1e2130' } },
+        x: {
+          type: 'time',
+          time: { tooltipFormat: 'HH:mm:ss', displayFormats: {
+            millisecond: 'HH:mm:ss',
+            second: 'HH:mm:ss',
+            minute: 'HH:mm',
+            hour: 'HH:mm',
+            day: 'MMM d',
+          }},
+          ticks: { color: '#555', maxTicksLimit: 8, maxRotation: 0 },
+          grid: { color: '#1e2130' }
+        },
         y: { ticks: { color: '#555' }, grid: { color: '#1e2130' } }
       }
     }
@@ -256,12 +269,9 @@ function updateChart(chartId) {
   const r = registry[chartId];
   const cutoff = Date.now() - WINDOWS[activeWindow];
   const pts = r.history.filter(p => p.ts >= cutoff);
-  const labels = pts.map(p => new Date(p.ts).toLocaleTimeString());
-  const data = pts.map(p => p.price);
-  r.chart.data.labels = labels;
-  r.chart.data.datasets[0].data = data;
-  if (data.length > 0) {
-    const cur = data[data.length - 1];
+  r.chart.data.datasets[0].data = pts.map(p => ({ x: p.ts, y: p.price }));
+  if (pts.length > 0) {
+    const cur = pts[pts.length - 1].price;
     const ann = r.chart.options.plugins.annotation.annotations;
     ann.currentLine.yMin = cur;
     ann.currentLine.yMax = cur;
