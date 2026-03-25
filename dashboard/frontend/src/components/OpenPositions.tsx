@@ -45,8 +45,6 @@ function PositionRow({ pos, prices, tf }: { pos: Position; prices: Record<string
   const totalPnl = pnlA + pnlB
 
   const capitalTotal = pos.notional_a + pos.notional_b
-  const exposureA = pos.notional_a * LEVERAGE
-  const exposureB = pos.notional_b * LEVERAGE
   const slPnl = -capitalTotal * STOP_LOSS_PCT
 
   const fmtP = (v: number) => (v >= 0 ? '+$' : '-$') + Math.abs(v).toFixed(2)
