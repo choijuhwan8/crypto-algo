@@ -104,32 +104,34 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
   <button class="tf-btn" data-tf="1d">1 day</button>
 </div>
 <div class="charts-grid">
-  {% for sym in active_symbols %}
-  {% set pos = open_positions|selectattr('sym_a','equalto',sym)|first|default(None) %}
-  {% if pos is none %}{% set pos = open_positions|selectattr('sym_b','equalto',sym)|first|default(None) %}{% endif %}
-  {% if pos %}
-    {% set is_a = pos.get('sym_a') == sym %}
-    {% set entry_price = pos.get('entry_price_a') if is_a else pos.get('entry_price_b') %}
-    {% set direction = pos.get('direction','') %}
-    {% set leg_dir = ('LONG' if (direction=='LONG_SPREAD' and is_a) or (direction=='SHORT_SPREAD' and not is_a) else 'SHORT') %}
-  {% else %}
-    {% set entry_price = None %}{% set leg_dir = '' %}
-  {% endif %}
+  {% for p in open_positions %}
+    {% set pair_key = p.get('pair_key','') %}
+    {% set direction = p.get('direction','') %}
+    {% for leg in ['a','b'] %}
+      {% set sym = p.get('sym_'+leg) %}
+      {% set is_a = leg == 'a' %}
+      {% set entry_price = p.get('entry_price_'+leg) %}
+      {% set leg_dir = ('LONG' if (direction=='LONG_SPREAD' and is_a) or (direction=='SHORT_SPREAD' and not is_a) else 'SHORT') %}
+      {% set chart_id = 'chart-' + pair_key + '-' + leg %}
   <div class="chart-box">
     <h2>{{ sym }}/USDT
-      <span class="live-price neu" id="price-{{ sym }}">loading...</span>
-      {% if leg_dir %}<span class="badge {{ 'pos' if leg_dir=='LONG' else 'neg' }}">{{ leg_dir }}</span>{% endif %}
+      <span class="badge">{{ pair_key }}</span>
+      <span class="live-price neu" id="price-{{ pair_key }}-{{ leg }}">loading...</span>
+      <span class="badge {{ 'pos' if leg_dir=='LONG' else 'neg' }}">{{ leg_dir }}</span>
     </h2>
-    <canvas id="chart-{{ sym }}" height="120"
+    <canvas id="{{ chart_id }}" height="120"
+      data-sym="{{ sym }}"
       data-entry="{{ entry_price or '' }}"
       data-dir="{{ leg_dir }}">
     </canvas>
   </div>
+    {% endfor %}
   {% endfor %}
 </div>
 {% else %}
 <p class="no-data">No open positions — no live charts.</p>
 {% endif %}
+
 
 <h2>Open Positions</h2>
 {% if open_positions %}
@@ -197,141 +199,89 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
 <p class="no-data">No closed trades yet.</p>
 {% endif %}
 
-{% if active_symbols %}
+{% if open_positions %}
 <script>
-// --- Live price charts ---
-const symbols = {{ active_symbols|tojson }};
+// --- Live price charts (one per position leg) ---
 const COLORS = ['#7eb6ff','#26c17c','#f5a623','#e05252','#b48eff','#50e3c2'];
-const charts = {};
-// Store full history as {ts: ms timestamp, price: float}
-const priceHistory = {};
-// Timeframe window in ms
 const WINDOWS = { '1m': 60e3, '15m': 15*60e3, '1h': 3600e3, '1d': 86400e3 };
 let activeWindow = '15m';
 
-function visiblePoints(sym) {
-  const cutoff = Date.now() - WINDOWS[activeWindow];
-  return priceHistory[sym].filter(p => p.ts >= cutoff);
-}
+// Build chart registry keyed by chartId
+// chartId = "chart-{pair_key}-{a|b}", each has { sym, entryPrice, legDir, history, chart }
+const registry = {};
 
-function updateChart(sym) {
-  const pts = visiblePoints(sym);
-  const labels = pts.map(p => new Date(p.ts).toLocaleTimeString());
-  const data = pts.map(p => p.price);
-  charts[sym].data.labels = labels;
-  charts[sym].data.datasets[0].data = data;
-
-  // Update current price annotation
-  if (data.length > 0) {
-    const cur = data[data.length - 1];
-    const ann = charts[sym].options.plugins.annotation.annotations;
-    ann.currentLine.yMin = cur;
-    ann.currentLine.yMax = cur;
-    ann.currentLine.label.display = true;
-    ann.currentLine.label.content = 'Now $' + cur.toPrecision(5);
-
-    // Set entry marker at first visible point index
-    if (pts.length > 0) {
-      ann.entryMarker.xMin = labels[0];
-      ann.entryMarker.xMax = labels[0];
-    }
-  }
-
-  charts[sym].update();
-}
-
-// Build per-symbol position metadata from canvas data attributes
-const symMeta = {};
-symbols.forEach(sym => {
-  const canvas = document.getElementById('chart-' + sym);
-  if (!canvas) return;
-  const entry = parseFloat(canvas.dataset.entry);
-  const dir = canvas.dataset.dir;
-  symMeta[sym] = { entry: isNaN(entry) ? null : entry, dir };
-});
-
-// Init charts
-symbols.forEach((sym, i) => {
-  priceHistory[sym] = [];
-  const ctx = document.getElementById('chart-' + sym);
-  if (!ctx) return;
-  const meta = symMeta[sym] || {};
-  const entryPrice = meta.entry;
-  const legDir = meta.dir;
+document.querySelectorAll('canvas[data-sym]').forEach((canvas, i) => {
+  const chartId = canvas.id;
+  const sym = canvas.dataset.sym;
+  const entryPrice = parseFloat(canvas.dataset.entry) || null;
+  const legDir = canvas.dataset.dir;
 
   const annotations = {};
-
-  // Horizontal entry price line
   if (entryPrice) {
     annotations.entryLine = {
       type: 'line', yMin: entryPrice, yMax: entryPrice,
       borderColor: '#f5a623', borderWidth: 1.5, borderDash: [6, 3],
-      label: {
-        display: true,
-        content: 'Entry $' + entryPrice.toPrecision(5),
+      label: { display: true, content: 'Entry $' + entryPrice.toPrecision(5),
         position: 'start', color: '#f5a623',
-        backgroundColor: 'rgba(245,166,35,0.15)', font: { size: 10 }
-      }
+        backgroundColor: 'rgba(245,166,35,0.15)', font: { size: 10 } }
     };
   }
-
-  // Current price horizontal line (updated dynamically)
   annotations.currentLine = {
     type: 'line', yMin: 0, yMax: 0,
     borderColor: legDir === 'LONG' ? '#26c17c' : '#e05252',
     borderWidth: 1, borderDash: [3, 3],
-    label: {
-      display: false, content: 'Current',
-      position: 'end', color: '#aaa',
-      backgroundColor: 'rgba(0,0,0,0.4)', font: { size: 10 }
-    }
+    label: { display: false, content: 'Now', position: 'end', color: '#aaa',
+      backgroundColor: 'rgba(0,0,0,0.4)', font: { size: 10 } }
   };
 
-  // Position entry marker (vertical line at first data point — added when data arrives)
-  annotations.entryMarker = {
-    type: 'line', xMin: null, xMax: null,
-    borderColor: '#ffffff33', borderWidth: 1, borderDash: [4, 4],
-    label: {
-      display: entryPrice != null,
-      content: (legDir || '') + ' entry',
-      position: 'start', color: '#fff',
-      backgroundColor: 'rgba(0,0,0,0.5)', font: { size: 10 }
-    }
-  };
-
-  charts[sym] = new Chart(ctx, {
+  const chart = new Chart(canvas, {
     type: 'line',
-    data: { labels: [], datasets: [{ label: sym, data: [],
+    data: { labels: [], datasets: [{ data: [],
       borderColor: COLORS[i % COLORS.length], borderWidth: 1.5,
       pointRadius: 0, fill: false }] },
     options: {
       animation: false,
-      plugins: {
-        legend: { display: false },
-        annotation: { annotations }
-      },
+      plugins: { legend: { display: false }, annotation: { annotations } },
       scales: {
         x: { ticks: { maxTicksLimit: 8, color: '#555' }, grid: { color: '#1e2130' } },
         y: { ticks: { color: '#555' }, grid: { color: '#1e2130' } }
       }
     }
   });
+
+  registry[chartId] = { sym, entryPrice, legDir, history: [], chart };
 });
 
-// Load historical data from Binance for a symbol + window
-async function loadHistory(sym, window) {
+function updateChart(chartId) {
+  const r = registry[chartId];
+  const cutoff = Date.now() - WINDOWS[activeWindow];
+  const pts = r.history.filter(p => p.ts >= cutoff);
+  const labels = pts.map(p => new Date(p.ts).toLocaleTimeString());
+  const data = pts.map(p => p.price);
+  r.chart.data.labels = labels;
+  r.chart.data.datasets[0].data = data;
+  if (data.length > 0) {
+    const cur = data[data.length - 1];
+    const ann = r.chart.options.plugins.annotation.annotations;
+    ann.currentLine.yMin = cur;
+    ann.currentLine.yMax = cur;
+    ann.currentLine.label.display = true;
+    ann.currentLine.label.content = 'Now $' + cur.toPrecision(5);
+  }
+  r.chart.update();
+}
+
+async function loadHistory(chartId, window) {
+  const r = registry[chartId];
   try {
-    const res = await fetch(`/api/history?symbol=${sym}&window=${window}`);
+    const res = await fetch(`/api/history?symbol=${r.sym}&window=${window}`);
     const rows = await res.json();
-    // Seed priceHistory with historical points
-    rows.forEach(r => {
-      // Only add if not already in history
-      if (!priceHistory[sym].find(p => p.ts === r.ts)) {
-        priceHistory[sym].push({ ts: r.ts, price: r.price });
-      }
+    rows.forEach(row => {
+      if (!r.history.find(p => p.ts === row.ts))
+        r.history.push({ ts: row.ts, price: row.price });
     });
-    priceHistory[sym].sort((a, b) => a.ts - b.ts);
-    updateChart(sym);
+    r.history.sort((a, b) => a.ts - b.ts);
+    updateChart(chartId);
   } catch(e) {}
 }
 
@@ -341,44 +291,45 @@ document.querySelectorAll('.tf-btn').forEach(btn => {
     activeWindow = btn.dataset.tf;
     document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    symbols.forEach(sym => loadHistory(sym, activeWindow));
+    Object.keys(registry).forEach(id => loadHistory(id, activeWindow));
   });
 });
 
-// On load: seed all charts with historical data
-symbols.forEach(sym => loadHistory(sym, activeWindow));
+// On load: seed all charts with history
+Object.keys(registry).forEach(id => loadHistory(id, activeWindow));
 
-// Fetch prices from our backend every 5s
+// Collect unique symbols for price polling
+const uniqueSyms = [...new Set(Object.values(registry).map(r => r.sym))];
+
 async function fetchPrices() {
   try {
-    const res = await fetch('/api/prices?symbols=' + symbols.join(','));
+    const res = await fetch('/api/prices?symbols=' + uniqueSyms.join(','));
     const data = await res.json();
     const now = new Date().toLocaleTimeString();
 
-    symbols.forEach(sym => {
-      const price = data[sym];
+    // Update each chart that uses this symbol
+    Object.entries(registry).forEach(([chartId, r]) => {
+      const price = data[r.sym];
       if (!price) return;
+      const p = parseFloat(price);
 
-      // Update price label
-      const el = document.getElementById('price-' + sym);
-      if (el) el.textContent = '$' + parseFloat(price).toPrecision(6);
+      // Update price label in chart header
+      const priceEl = document.getElementById('price-' + chartId.replace('chart-',''));
+      if (priceEl) priceEl.textContent = '$' + p.toPrecision(6);
 
       // Update live price cells in table
-      const cellA = document.getElementById('live-a-' + sym);
-      if (cellA) cellA.textContent = '$' + parseFloat(price).toFixed(4);
-      const cellB = document.getElementById('live-b-' + sym);
-      if (cellB) cellB.textContent = '$' + parseFloat(price).toFixed(4);
+      const cellA = document.getElementById('live-a-' + r.sym);
+      if (cellA) cellA.textContent = '$' + p.toFixed(4);
+      const cellB = document.getElementById('live-b-' + r.sym);
+      if (cellB) cellB.textContent = '$' + p.toFixed(4);
 
-      // Store timestamped point, keep max 1 day of 5s data (~17280 pts)
-      priceHistory[sym].push({ ts: Date.now(), price: parseFloat(price) });
-      if (priceHistory[sym].length > 17280) priceHistory[sym].shift();
-
-      // Update chart for active window
-      if (charts[sym]) updateChart(sym);
+      // Append to history
+      r.history.push({ ts: Date.now(), price: p });
+      if (r.history.length > 17280) r.history.shift();
+      updateChart(chartId);
     });
 
-    document.getElementById('last-refresh').textContent =
-      'live · updated ' + now;
+    document.getElementById('last-refresh').textContent = 'live · updated ' + now;
   } catch(e) {
     document.getElementById('last-refresh').textContent = 'price fetch failed';
   }
