@@ -103,6 +103,8 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
   <button class="tf-btn active" data-tf="15m">15 min</button>
   <button class="tf-btn" data-tf="1h">1 hour</button>
   <button class="tf-btn" data-tf="1d">1 day</button>
+  <button class="tf-btn" data-tf="1w">1 week</button>
+  <button class="tf-btn" data-tf="1M">1 month</button>
 </div>
 <table>
   <thead><tr>
@@ -226,7 +228,15 @@ function toggleCharts(rowId) {
 
 // --- Live price charts (one per position leg) ---
 const COLORS = ['#7eb6ff','#26c17c','#f5a623','#e05252','#b48eff','#50e3c2'];
-const WINDOWS = { '1m': 60e3, '15m': 15*60e3, '1h': 3600e3, '1d': 86400e3 };
+const WINDOWS = { '1m': 60e3, '15m': 15*60e3, '1h': 3600e3, '1d': 86400e3, '1w': 7*86400e3, '1M': 30*86400e3 };
+const TF_FORMATS = {
+  '1m':  { unit: 'minute',  fmt: 'HH:mm' },
+  '15m': { unit: 'minute',  fmt: 'HH:mm' },
+  '1h':  { unit: 'hour',    fmt: 'HH:mm' },
+  '1d':  { unit: 'hour',    fmt: 'MMM d' },
+  '1w':  { unit: 'day',     fmt: 'MMM d' },
+  '1M':  { unit: 'day',     fmt: 'MMM d' },
+};
 let activeWindow = '15m';
 
 // Build chart registry keyed by chartId
@@ -324,6 +334,12 @@ document.querySelectorAll('.tf-btn').forEach(btn => {
     activeWindow = btn.dataset.tf;
     document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    // Update x-axis format for all open charts
+    const tf = TF_FORMATS[activeWindow] || TF_FORMATS['15m'];
+    Object.values(registry).forEach(r => {
+      r.chart.options.scales.x.time.unit = tf.unit;
+      r.chart.options.scales.x.time.displayFormats = { [tf.unit]: tf.fmt };
+    });
     Object.keys(registry).forEach(id => loadHistory(id, activeWindow));
   });
 });
@@ -433,6 +449,8 @@ def api_history():
         "15m": ("1m",  900),
         "1h":  ("5m",  720),
         "1d":  ("1h",  24),
+        "1w":  ("4h",  42),
+        "1M":  ("1d",  30),
     }.get(window, ("1m", 60))
     interval, limit = cfg
     try:
