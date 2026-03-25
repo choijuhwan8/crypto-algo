@@ -178,17 +178,11 @@ class PaperBot:
         if open_positions:
             lines = ["*Hourly PnL Update*"]
             for pos in open_positions.values():
-                stats = self.signal_svc.get_stats(pos.pair_key)
-                if stats:
-                    upnl = pos.unrealized_pnl(stats["price_a"], stats["price_b"])
-                    # Store current market data on position for dashboard
-                    pos.current_price_a = stats["price_a"]
-                    pos.current_price_b = stats["price_b"]
-                    pos.current_zscore = stats["zscore"]
-                    pos.last_updated = datetime.now(timezone.utc).isoformat()
+                zscore = getattr(pos, "current_zscore", None)
+                if zscore is not None:
                     lines.append(
                         f"`{pos.pair_key}` `{pos.direction}` | "
-                        f"z={stats['zscore']:.2f} | uPnL=`${upnl:+.2f}`"
+                        f"z={zscore:.2f} | uPnL=`${pos.pnl:+.2f}`"
                     )
             if len(lines) > 1:
                 await self.telegram.send("\n".join(lines))
@@ -213,6 +207,13 @@ class PaperBot:
 
         # --- Handle open position ---
         if existing_pos:
+            # Update live market data on position for dashboard
+            existing_pos.unrealized_pnl(stats["price_a"], stats["price_b"])
+            existing_pos.current_price_a = stats["price_a"]
+            existing_pos.current_price_b = stats["price_b"]
+            existing_pos.current_zscore = stats["zscore"]
+            existing_pos.last_updated = datetime.now(timezone.utc).isoformat()
+
             # Stop-loss check
             if existing_pos.is_stop_loss(stats["price_a"], stats["price_b"]):
                 pnl = self.execution.exit_position(
