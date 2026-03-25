@@ -120,7 +120,15 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
   {% set pair_key = p.get('pair_key','') %}
   {% set direction = p.get('direction','') %}
   {% set sl_pnl = -(p.get('notional_a',0) + p.get('notional_b',0)) * 0.15 %}
-  <tr class="pos-row" onclick="toggleCharts('charts-{{ loop.index }}')" style="cursor:pointer">
+  <tr class="pos-row" onclick="toggleCharts('charts-{{ loop.index }}')" style="cursor:pointer"
+    data-sym-a="{{ p.get('sym_a','') }}"
+    data-sym-b="{{ p.get('sym_b','') }}"
+    data-entry-a="{{ p.get('entry_price_a',0) }}"
+    data-entry-b="{{ p.get('entry_price_b',0) }}"
+    data-notional-a="{{ p.get('notional_a',0) }}"
+    data-notional-b="{{ p.get('notional_b',0) }}"
+    data-direction="{{ direction }}"
+    data-idx="{{ loop.index }}">
     <td style="color:#555;font-size:.7rem">▶</td>
     <td>{{ p.get('pair_key','—') }}</td>
     <td>{{ p.get('direction','—') }}</td>
@@ -343,6 +351,43 @@ async function fetchPrices() {
       if (cellA) cellA.textContent = '$' + p.toFixed(4);
       const cellB = document.getElementById('live-b-' + sym);
       if (cellB) cellB.textContent = '$' + p.toFixed(4);
+    });
+
+    // Recompute live uPnL per position row
+    document.querySelectorAll('tr.pos-row[data-idx]').forEach(row => {
+      const symA = row.dataset.symA;
+      const symB = row.dataset.symB;
+      const priceA = parseFloat(data[symA]);
+      const priceB = parseFloat(data[symB]);
+      if (!priceA || !priceB) return;
+
+      const entryA   = parseFloat(row.dataset.entryA);
+      const entryB   = parseFloat(row.dataset.entryB);
+      const notlA    = parseFloat(row.dataset.notionalA);
+      const notlB    = parseFloat(row.dataset.notionalB);
+      const dir      = row.dataset.direction;
+      const idx      = row.dataset.idx;
+
+      let pnlA, pnlB;
+      if (dir === 'LONG_SPREAD') {
+        pnlA = notlA * (priceA - entryA) / entryA;   // long leg A
+        pnlB = notlB * (entryB - priceB) / entryB;   // short leg B
+      } else {
+        pnlA = notlA * (entryA - priceA) / entryA;   // short leg A
+        pnlB = notlB * (priceB - entryB) / entryB;   // long leg B
+      }
+      const total = pnlA + pnlB;
+
+      function fmt(v) { return (v >= 0 ? '+$' : '-$') + Math.abs(v).toFixed(2); }
+      function setCell(id, v) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = fmt(v);
+        el.className = v >= 0 ? 'pos' : 'neg';
+      }
+      setCell('pnl-a-' + idx, pnlA);
+      setCell('pnl-b-' + idx, pnlB);
+      setCell('pnl-total-' + idx, total);
     });
 
     // Update open charts
