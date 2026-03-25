@@ -9,7 +9,6 @@ const TF_BTNS: Timeframe[] = ['1m', '15m', '1h', '1d', '1w', '1M']
 const TF_LABELS: Record<Timeframe, string> = {
   '1m': '1 min', '15m': '15 min', '1h': '1 hour', '1d': '1 day', '1w': '1 week', '1M': '1 month',
 }
-const LEVERAGE = 3
 const STOP_LOSS_PCT = 0.15
 
 function pnlColor(v: number) { return v >= 0 ? 'text-[#26c17c]' : 'text-[#e05252]' }
