@@ -98,6 +98,7 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
 
 <h2>Open Positions</h2>
 {% if open_positions %}
+<p style="font-size:.72rem;color:#666;margin-bottom:8px">Live prices and uPnL update every 5 seconds via Binance public API. Entry prices and position data refresh on page load.</p>
 <div class="tf-btns">
   <button class="tf-btn" data-tf="1m">1 min</button>
   <button class="tf-btn active" data-tf="15m">15 min</button>
