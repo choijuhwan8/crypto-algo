@@ -71,11 +71,15 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
   {% if equity_labels %}
   <canvas id="ec" height="80"></canvas>
   <script>
+  (function(){
+    var ecLabels = {{ equity_labels|tojson }};
+    var ecValues = {{ equity_values|tojson }};
+    var ecData = ecLabels.map(function(ts, i){ return { x: new Date(ts).getTime(), y: ecValues[i] }; });
     new Chart(document.getElementById('ec'), {
       type: 'line',
       data: {
         datasets:[{
-          data: {{ equity_labels|tojson }}.map((ts, i) => ({ x: new Date(ts).getTime(), y: {{ equity_values|tojson }}[i] })),
+          data: ecData,
           borderColor:'#7eb6ff', borderWidth:1.5,
           pointRadius:0, fill:true,
           backgroundColor:'rgba(126,182,255,0.08)'
@@ -88,22 +92,23 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
           annotation:{annotations:{
             initialLine:{
               type:'line', yMin:{{ initial_capital }}, yMax:{{ initial_capital }},
-              borderColor:'rgba(255,255,255,0.2)', borderWidth:1, borderDash:[6,4],
+              borderColor:'rgba(255,255,255,0.35)', borderWidth:1.5, borderDash:[6,4],
               label:{ display:true, content:'Initial ${{ "%,.0f"|format(initial_capital) }}',
-                position:'start', color:'#888', backgroundColor:'transparent', font:{size:10} }
+                position:'start', color:'#aaa', backgroundColor:'rgba(0,0,0,0.4)', font:{size:10} }
             }
           }}
         },
         scales:{
           x:{
             type:'time',
-            time:{ tooltipFormat:'MMM d HH:mm', displayFormats:{ hour:'MMM d HH:mm', day:'MMM d', minute:'HH:mm' }},
-            ticks:{maxTicksLimit:8,color:'#555'}, grid:{color:'#1e2130'}
+            time:{ tooltipFormat:'MMM d HH:mm', displayFormats:{ millisecond:'HH:mm', second:'HH:mm', minute:'HH:mm', hour:'MMM d HH:mm', day:'MMM d' }},
+            ticks:{maxTicksLimit:8, color:'#666'}, grid:{color:'#1e2130'}
           },
-          y:{ticks:{color:'#555'},grid:{color:'#1e2130'}}
+          y:{ticks:{color:'#666', callback: function(v){ return '$'+v.toLocaleString(); }}, grid:{color:'#1e2130'}}
         }
       }
     });
+  })();
   </script>
   {% else %}
   <p class="no-data">No equity curve data yet.</p>
