@@ -93,7 +93,7 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
             initialLine:{
               type:'line', yMin:{{ initial_capital }}, yMax:{{ initial_capital }},
               borderColor:'rgba(255,255,255,0.35)', borderWidth:1.5, borderDash:[6,4],
-              label:{ display:true, content:'Initial ${{ "%,.0f"|format(initial_capital) }}',
+              label:{ display:true, content:'Initial ${{ initial_capital|int }}',
                 position:'start', color:'#aaa', backgroundColor:'rgba(0,0,0,0.4)', font:{size:10} }
             }
           }}
