@@ -318,15 +318,35 @@ symbols.forEach((sym, i) => {
   });
 });
 
+// Load historical data from Binance for a symbol + window
+async function loadHistory(sym, window) {
+  try {
+    const res = await fetch(`/api/history?symbol=${sym}&window=${window}`);
+    const rows = await res.json();
+    // Seed priceHistory with historical points
+    rows.forEach(r => {
+      // Only add if not already in history
+      if (!priceHistory[sym].find(p => p.ts === r.ts)) {
+        priceHistory[sym].push({ ts: r.ts, price: r.price });
+      }
+    });
+    priceHistory[sym].sort((a, b) => a.ts - b.ts);
+    updateChart(sym);
+  } catch(e) {}
+}
+
 // Timeframe buttons
 document.querySelectorAll('.tf-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     activeWindow = btn.dataset.tf;
     document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    symbols.forEach(updateChart);
+    symbols.forEach(sym => loadHistory(sym, activeWindow));
   });
 });
+
+// On load: seed all charts with historical data
+symbols.forEach(sym => loadHistory(sym, activeWindow));
 
 // Fetch prices from our backend every 5s
 async function fetchPrices() {
@@ -370,6 +390,31 @@ setInterval(fetchPrices, 5000);
 {% endif %}
 
 </body></html>"""
+
+
+@app.route("/api/history")
+def api_history():
+    """Fetch Binance kline history for a symbol and timeframe window."""
+    from flask import request
+    sym = request.args.get("symbol", "").upper()
+    window = request.args.get("window", "15m")
+    # Map window to Binance interval + limit
+    cfg = {
+        "1m":  ("1m",  60),
+        "15m": ("1m",  900),
+        "1h":  ("5m",  720),
+        "1d":  ("1h",  24),
+    }.get(window, ("1m", 60))
+    interval, limit = cfg
+    try:
+        url = f"https://fapi.binance.com/fapi/v1/klines?symbol={sym}USDT&interval={interval}&limit={limit}"
+        with urllib.request.urlopen(url, timeout=10) as r:
+            rows = json.loads(r.read())
+        # rows: [openTime, open, high, low, close, ...]
+        result = [{"ts": row[0], "price": float(row[4])} for row in rows]
+        return jsonify(result)
+    except Exception as e:
+        return jsonify([])
 
 
 @app.route("/api/prices")
