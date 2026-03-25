@@ -521,10 +521,16 @@ def index():
     ))
 
     equity_labels, equity_values = [], []
+    if state:
+        from src.config import INITIAL_CAPITAL as IC
+        # Seed with the initial capital point so the curve always starts at baseline
+        start_ts = (equity_data[0].get("ts") if equity_data else None) or state.get("saved_at", "")
+        equity_labels = [start_ts]
+        equity_values = [IC]
     if equity_data:
         pts = equity_data[-200:]
-        equity_labels = [p.get("ts", p.get("time", i)) for i, p in enumerate(pts)]
-        equity_values = [p.get("equity", p.get("value", 0)) for p in pts]
+        equity_labels += [p.get("ts", p.get("time", i)) for i, p in enumerate(pts)]
+        equity_values += [p.get("equity", p.get("value", 0)) for p in pts]
 
     return render_template_string(
         TEMPLATE,
