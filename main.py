@@ -208,9 +208,16 @@ class PaperBot:
         # --- Handle open position ---
         if existing_pos:
             # Update live market data on position for dashboard
-            existing_pos.unrealized_pnl(stats["price_a"], stats["price_b"])
-            existing_pos.current_price_a = stats["price_a"]
-            existing_pos.current_price_b = stats["price_b"]
+            pa, pb = stats["price_a"], stats["price_b"]
+            existing_pos.unrealized_pnl(pa, pb)
+            if existing_pos.direction == "LONG_SPREAD":
+                existing_pos.pnl_a = existing_pos.notional_a * (pa - existing_pos.entry_price_a) / existing_pos.entry_price_a
+                existing_pos.pnl_b = existing_pos.notional_b * (existing_pos.entry_price_b - pb) / existing_pos.entry_price_b
+            else:
+                existing_pos.pnl_a = existing_pos.notional_a * (existing_pos.entry_price_a - pa) / existing_pos.entry_price_a
+                existing_pos.pnl_b = existing_pos.notional_b * (pb - existing_pos.entry_price_b) / existing_pos.entry_price_b
+            existing_pos.current_price_a = pa
+            existing_pos.current_price_b = pb
             existing_pos.current_zscore = stats["zscore"]
             existing_pos.last_updated = datetime.now(timezone.utc).isoformat()
 

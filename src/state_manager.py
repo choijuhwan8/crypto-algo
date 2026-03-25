@@ -203,6 +203,8 @@ class StateManager:
                 "entry_time": p.entry_time.isoformat(),
                 "entry_zscore": p.entry_zscore,
                 "pnl": p.pnl,
+                "pnl_a": getattr(p, "pnl_a", None),
+                "pnl_b": getattr(p, "pnl_b", None),
                 "status": p.status,
             }
             for p in self._open_positions.values()

@@ -99,9 +99,9 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
   <thead><tr>
     <th>Pair</th><th>Direction</th>
     <th>Entry Z</th><th>Current Z</th>
-    <th>Entry Price A</th><th>Current Price A</th>
-    <th>Entry Price B</th><th>Current Price B</th>
-    <th>Notional</th><th>Leverage</th><th>Unrealised PnL</th>
+    <th>Entry Price A</th><th>Current Price A</th><th>Leg A PnL</th>
+    <th>Entry Price B</th><th>Current Price B</th><th>Leg B PnL</th>
+    <th>Notional</th><th>Leverage</th><th>Total uPnL</th>
     <th>Stop Loss</th><th>Exit Target</th>
     <th>Opened</th><th>Last Updated</th>
   </tr></thead>
@@ -115,8 +115,10 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
     <td>{{ "%.2f"|format(p.get('current_zscore',0)) if p.get('current_zscore') is not none else '—' }}</td>
     <td>${{ "%.4f"|format(p.get('entry_price_a',0)) }}</td>
     <td>{{ "$%.4f"|format(p.get('current_price_a',0)) if p.get('current_price_a') is not none else '—' }}</td>
+    <td class="{{ 'pos' if p.get('pnl_a',0)>=0 else 'neg' }}">{{ "$%.2f"|format(p.get('pnl_a',0)) if p.get('pnl_a') is not none else '—' }}</td>
     <td>${{ "%.4f"|format(p.get('entry_price_b',0)) }}</td>
     <td>{{ "$%.4f"|format(p.get('current_price_b',0)) if p.get('current_price_b') is not none else '—' }}</td>
+    <td class="{{ 'pos' if p.get('pnl_b',0)>=0 else 'neg' }}">{{ "$%.2f"|format(p.get('pnl_b',0)) if p.get('pnl_b') is not none else '—' }}</td>
     <td>${{ "%.2f"|format(p.get('notional_a',0)) }}</td>
     <td class="neu">{{ leverage }}x</td>
     <td class="{{ 'pos' if p.get('pnl',0)>=0 else 'neg' }}">${{ "%.2f"|format(p.get('pnl',0)) }}</td>
