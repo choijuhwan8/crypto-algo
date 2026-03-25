@@ -181,12 +181,18 @@ class PaperBot:
                 stats = self.signal_svc.get_stats(pos.pair_key)
                 if stats:
                     upnl = pos.unrealized_pnl(stats["price_a"], stats["price_b"])
+                    # Store current market data on position for dashboard
+                    pos.current_price_a = stats["price_a"]
+                    pos.current_price_b = stats["price_b"]
+                    pos.current_zscore = stats["zscore"]
+                    pos.last_updated = datetime.now(timezone.utc).isoformat()
                     lines.append(
                         f"`{pos.pair_key}` `{pos.direction}` | "
                         f"z={stats['zscore']:.2f} | uPnL=`${upnl:+.2f}`"
                     )
             if len(lines) > 1:
                 await self.telegram.send("\n".join(lines))
+            self.state._save()
 
         self.state.append_run_log("HOURLY", f"pairs={len(pairs)}")
 

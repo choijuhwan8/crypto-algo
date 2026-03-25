@@ -97,17 +97,32 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
 {% if open_positions %}
 <table style="margin-bottom:24px">
   <thead><tr>
-    <th>Pair</th><th>Direction</th><th>Entry Z</th><th>Notional</th><th>Unrealised PnL</th><th>Opened</th>
+    <th>Pair</th><th>Direction</th>
+    <th>Entry Z</th><th>Current Z</th>
+    <th>Entry Price A</th><th>Current Price A</th>
+    <th>Entry Price B</th><th>Current Price B</th>
+    <th>Notional</th><th>Unrealised PnL</th>
+    <th>Stop Loss</th><th>Exit Target</th>
+    <th>Opened</th><th>Last Updated</th>
   </tr></thead>
   <tbody>
   {% for p in open_positions %}
+  {% set sl_pnl = -(p.get('notional_a',0) + p.get('notional_b',0)) * 0.15 %}
   <tr>
     <td>{{ p.get('pair_key','—') }}</td>
     <td>{{ p.get('direction','—') }}</td>
     <td>{{ "%.2f"|format(p.get('entry_zscore',0)) }}</td>
+    <td>{{ "%.2f"|format(p.get('current_zscore',0)) if p.get('current_zscore') is not none else '—' }}</td>
+    <td>${{ "%.4f"|format(p.get('entry_price_a',0)) }}</td>
+    <td>{{ "$%.4f"|format(p.get('current_price_a',0)) if p.get('current_price_a') is not none else '—' }}</td>
+    <td>${{ "%.4f"|format(p.get('entry_price_b',0)) }}</td>
+    <td>{{ "$%.4f"|format(p.get('current_price_b',0)) if p.get('current_price_b') is not none else '—' }}</td>
     <td>${{ "%.2f"|format(p.get('notional_a',0)) }}</td>
     <td class="{{ 'pos' if p.get('pnl',0)>=0 else 'neg' }}">${{ "%.2f"|format(p.get('pnl',0)) }}</td>
+    <td class="neg">${{ "%.2f"|format(sl_pnl) }}</td>
+    <td class="neu">z → 0.0</td>
     <td>{{ p.get('entry_time','—')[:19] }}</td>
+    <td>{{ p.get('last_updated','—')[:19] if p.get('last_updated') else '—' }}</td>
   </tr>
   {% endfor %}
   </tbody>
