@@ -36,6 +36,9 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
   .no-data{color:#888;font-style:italic;padding:20px 0;margin-bottom:24px}
   .live-price{font-weight:700;font-size:.9rem}
   .badge{font-size:.65rem;padding:2px 6px;border-radius:4px;background:#252836;color:#aaa;margin-left:4px}
+  .tf-btns{display:flex;gap:6px;margin-bottom:12px}
+  .tf-btn{background:#1a1d27;border:1px solid #252836;color:#aaa;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:.75rem}
+  .tf-btn.active,.tf-btn:hover{background:#7eb6ff;color:#0f1117;border-color:#7eb6ff}
 </style>
 </head><body>
 <h1>Crypto Paper Trading — Dashboard
@@ -93,6 +96,12 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
 
 <h2>Live Price Charts</h2>
 {% if active_symbols %}
+<div class="tf-btns">
+  <button class="tf-btn" data-tf="1m">1 min</button>
+  <button class="tf-btn active" data-tf="15m">15 min</button>
+  <button class="tf-btn" data-tf="1h">1 hour</button>
+  <button class="tf-btn" data-tf="1d">1 day</button>
+</div>
 <div class="charts-grid">
   {% for sym in active_symbols %}
   <div class="chart-box">
@@ -177,37 +186,56 @@ TEMPLATE = """<!doctype html><html lang="en"><head>
 <script>
 // --- Live price charts ---
 const symbols = {{ active_symbols|tojson }};
-const positions = {{ open_positions|tojson }};
 const COLORS = ['#7eb6ff','#26c17c','#f5a623','#e05252','#b48eff','#50e3c2'];
 const charts = {};
+// Store full history as {ts: ms timestamp, price: float}
 const priceHistory = {};
+// Timeframe window in ms
+const WINDOWS = { '1m': 60e3, '15m': 15*60e3, '1h': 3600e3, '1d': 86400e3 };
+let activeWindow = '15m';
+
+function visiblePoints(sym) {
+  const cutoff = Date.now() - WINDOWS[activeWindow];
+  return priceHistory[sym].filter(p => p.ts >= cutoff);
+}
+
+function updateChart(sym) {
+  const pts = visiblePoints(sym);
+  const labels = pts.map(p => new Date(p.ts).toLocaleTimeString());
+  const data = pts.map(p => p.price);
+  charts[sym].data.labels = labels;
+  charts[sym].data.datasets[0].data = data;
+  charts[sym].update();
+}
 
 // Init charts
 symbols.forEach((sym, i) => {
-  priceHistory[sym] = { labels: [], data: [] };
+  priceHistory[sym] = [];
   const ctx = document.getElementById('chart-' + sym);
   if (!ctx) return;
   charts[sym] = new Chart(ctx, {
     type: 'line',
-    data: {
-      labels: [],
-      datasets: [{
-        label: sym,
-        data: [],
-        borderColor: COLORS[i % COLORS.length],
-        borderWidth: 1.5,
-        pointRadius: 0,
-        fill: false,
-      }]
-    },
+    data: { labels: [], datasets: [{ label: sym, data: [],
+      borderColor: COLORS[i % COLORS.length], borderWidth: 1.5,
+      pointRadius: 0, fill: false }] },
     options: {
       animation: false,
       plugins: { legend: { display: false } },
       scales: {
-        x: { ticks: { maxTicksLimit: 6, color: '#555' }, grid: { color: '#1e2130' } },
+        x: { ticks: { maxTicksLimit: 8, color: '#555' }, grid: { color: '#1e2130' } },
         y: { ticks: { color: '#555' }, grid: { color: '#1e2130' } }
       }
     }
+  });
+});
+
+// Timeframe buttons
+document.querySelectorAll('.tf-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    activeWindow = btn.dataset.tf;
+    document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    symbols.forEach(updateChart);
   });
 });
 
@@ -232,16 +260,12 @@ async function fetchPrices() {
       const cellB = document.getElementById('live-b-' + sym);
       if (cellB) cellB.textContent = '$' + parseFloat(price).toFixed(4);
 
-      // Update chart
-      const h = priceHistory[sym];
-      h.labels.push(now);
-      h.data.push(parseFloat(price));
-      if (h.labels.length > 120) { h.labels.shift(); h.data.shift(); }
-      if (charts[sym]) {
-        charts[sym].data.labels = h.labels;
-        charts[sym].data.datasets[0].data = h.data;
-        charts[sym].update();
-      }
+      // Store timestamped point, keep max 1 day of 5s data (~17280 pts)
+      priceHistory[sym].push({ ts: Date.now(), price: parseFloat(price) });
+      if (priceHistory[sym].length > 17280) priceHistory[sym].shift();
+
+      // Update chart for active window
+      if (charts[sym]) updateChart(sym);
     });
 
     document.getElementById('last-refresh').textContent =
