@@ -166,6 +166,15 @@ class PaperBot:
             {sym for p in pairs for sym in (p["sym_a"], p["sym_b"])}
         )
 
+        equity = self.state.get_equity()
+        open_pos = self.state.get_open_positions()
+        await self.telegram.send(
+            f"🔍 *Hourly scan started*\n"
+            f"Equity: `${equity:,.2f}` | "
+            f"Open: `{len(open_pos)}` | "
+            f"Scanning `{len(pairs)}` pairs"
+        )
+
         # Update candles for active symbols
         for tok in active_symbols:
             self.ds.update_candle(tok)
@@ -203,6 +212,14 @@ class PaperBot:
             if len(lines) > 1:
                 await self.telegram.send("\n".join(lines))
             self.state._save()
+
+        # Summary if no new trades opened
+        new_open = self.state.get_open_positions()
+        if len(new_open) == len(open_pos):
+            await self.telegram.send(
+                f"✅ *Scan complete* – no new entries\n"
+                f"Open positions: `{len(new_open)}`"
+            )
 
         self.state.append_run_log("HOURLY", f"pairs={len(pairs)}")
 
@@ -331,6 +348,14 @@ class PaperBot:
         # Re-run pair selection
         await asyncio.get_event_loop().run_in_executor(
             None, self.pair_selector.run, self._available_tokens
+        )
+
+        new_pairs = self.pair_selector.get_pairs()
+        pair_list = ", ".join(f"`{p['sym_a']}-{p['sym_b']}`" for p in new_pairs[:10])
+        await self.telegram.send(
+            f"📊 *Pair selection complete*\n"
+            f"Selected `{len(new_pairs)}` pairs\n"
+            f"{pair_list}"
         )
 
         # Daily summary to Telegram
