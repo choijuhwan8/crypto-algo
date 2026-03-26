@@ -16,6 +16,7 @@ HOLD         : no actionable signal
 from __future__ import annotations
 
 import logging
+import os
 from enum import Enum
 from typing import Dict, Optional, Tuple
 
@@ -43,10 +44,14 @@ class SignalService:
     # Public API
     # ------------------------------------------------------------------
 
-    def compute_stats(self, tok_a: str, tok_b: str) -> Optional[Dict]:
+    def compute_stats(self, tok_a: str, tok_b: str, window: Optional[int] = None) -> Optional[Dict]:
         """
         Recompute spread stats for the pair using the latest cached data.
         Returns a stats dict or None when data is insufficient.
+
+        Parameters
+        ----------
+        window : override ROLLING_WINDOW for this pair (Cornell per-pair L)
         """
         df_a = self.ds.get_cache(tok_a)
         df_b = self.ds.get_cache(tok_b)
@@ -55,15 +60,17 @@ class SignalService:
             logger.warning(f"Missing data for {tok_a}-{tok_b}")
             return None
 
+        rolling_window = window if window is not None else ROLLING_WINDOW
+
         common = df_a.index.intersection(df_b.index)
-        min_bars = ROLLING_WINDOW // 2
+        min_bars = rolling_window // 2
         if len(common) < min_bars:
             logger.warning(
                 f"{tok_a}-{tok_b}: only {len(common)} common bars (need {min_bars})"
             )
             return None
 
-        win = min(ROLLING_WINDOW, len(common))
+        win = min(rolling_window, len(common))
         log_a = np.log(df_a.loc[common, "close"].values[-win:])
         log_b = np.log(df_b.loc[common, "close"].values[-win:])
 
@@ -113,6 +120,9 @@ class SignalService:
         tok_a: str,
         tok_b: str,
         current_direction: Optional[str] = None,
+        window: Optional[int] = None,
+        z_entry: Optional[float] = None,
+        z_exit: Optional[float] = None,
     ) -> Tuple[Signal, Dict]:
         """
         Generate signal for a pair.
@@ -121,32 +131,61 @@ class SignalService:
         ----------
         current_direction : None / "LONG_SPREAD" / "SHORT_SPREAD"
             Current open position direction, or None when flat.
+        window  : per-pair OLS window override (Cornell L)
+        z_entry : per-pair entry threshold override
+        z_exit  : per-pair exit threshold override
 
         Returns
         -------
         (Signal, stats_dict)
         """
-        stats = self.compute_stats(tok_a, tok_b)
+        stats = self.compute_stats(tok_a, tok_b, window=window)
         if stats is None:
             return Signal.HOLD, {}
 
         z = stats["zscore"]
+        ze_entry = z_entry if z_entry is not None else Z_ENTRY
+        ze_exit  = z_exit  if z_exit  is not None else Z_EXIT
 
         if current_direction is None:
             # Entry logic
-            if z < -Z_ENTRY:
+            if z < -ze_entry:
                 return Signal.LONG_SPREAD, stats
-            if z > Z_ENTRY:
+            if z > ze_entry:
                 return Signal.SHORT_SPREAD, stats
             return Signal.HOLD, stats
 
-        # Exit logic – close when spread reverts past Z_EXIT
-        if current_direction == "LONG_SPREAD" and z >= Z_EXIT:
+        # Exit logic – close when spread reverts past ze_exit
+        if current_direction == "LONG_SPREAD" and z >= ze_exit:
             return Signal.EXIT, stats
-        if current_direction == "SHORT_SPREAD" and z <= Z_EXIT:
+        if current_direction == "SHORT_SPREAD" and z <= ze_exit:
             return Signal.EXIT, stats
 
         return Signal.HOLD, stats
+
+    def check_zscore_breakdown(self, position, current_zscore: float) -> bool:
+        """
+        Return True if the mean-reversion thesis has broken down.
+
+        A LONG_SPREAD position assumes the spread will rise back toward zero,
+        so a deeply negative z-score moving further away signals failure.
+        A SHORT_SPREAD position assumes the spread will fall, so a deeply
+        positive z-score moving further away signals failure.
+        """
+        threshold = float(os.getenv("ZSCORE_BREAKDOWN_THRESHOLD", 2.5))
+        if position.direction == "LONG_SPREAD" and current_zscore < -threshold:
+            logger.warning(
+                f"Z-score breakdown on {position.pair_key} (LONG_SPREAD): "
+                f"z={current_zscore:.2f} < -{threshold}"
+            )
+            return True
+        if position.direction == "SHORT_SPREAD" and current_zscore > threshold:
+            logger.warning(
+                f"Z-score breakdown on {position.pair_key} (SHORT_SPREAD): "
+                f"z={current_zscore:.2f} > {threshold}"
+            )
+            return True
+        return False
 
     def get_stats(self, pair_key: str) -> Optional[Dict]:
         return self._stats.get(pair_key)

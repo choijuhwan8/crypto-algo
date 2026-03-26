@@ -14,8 +14,11 @@ A pause is a softer stop that can be lifted with /resume.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
 
 from .config import MAX_CONCURRENT_PAIRS, MAX_PORTFOLIO_DD
 
@@ -70,16 +73,25 @@ class RiskEngine:
             "kill_reason": self._kill_reason,
             "dd_breach": False,
             "stale_data": False,
+            "rolling_24h_dd_breach": False,
         }
 
         if self._kill_active:
             status["ok"] = False
             return status
 
-        # Portfolio draw-down
+        # Portfolio draw-down (kill switch)
         if self._check_drawdown():
             status["ok"] = False
             status["dd_breach"] = True
+
+        # Rolling 24h draw-down (pause)
+        dd_24h, breached = self._check_rolling_24h_drawdown()
+        if breached:
+            self._paused = True
+            status["rolling_24h_dd_breach"] = True
+            status["rolling_24h_dd"] = dd_24h
+            logger.warning(f"RiskEngine: 24h rolling DD {dd_24h:.2%} – bot PAUSED")
 
         # Data freshness
         if data_service and symbols:
@@ -120,6 +132,71 @@ class RiskEngine:
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
+
+    def check_max_hold_period(self, position, current_time: datetime) -> bool:
+        """Return True if position has exceeded the max hold period."""
+        hours_held = (current_time - position.entry_time).total_seconds() / 3600
+        max_hours = float(os.getenv("MAX_HOLD_HOURS", 168))
+        if hours_held > max_hours:
+            logger.info(
+                f"Position {position.pair_key} exceeded max hold: {hours_held:.1f}h "
+                f"(limit {max_hours:.0f}h)"
+            )
+            return True
+        return False
+
+    def check_realtime_correlation(
+        self, position, data_service, lookback_hours: int = 24
+    ) -> Tuple[bool, float]:
+        """
+        Return (is_ok, corr).  is_ok=False means correlation has degraded below
+        REALTIME_CORR_MIN and the position should be closed.
+
+        Uses the in-memory cache from DataService — no extra network calls.
+        """
+        try:
+            df_a = data_service.get_cache(position.sym_a)
+            df_b = data_service.get_cache(position.sym_b)
+
+            if df_a is None or df_b is None:
+                return True, 1.0
+
+            common = df_a.index.intersection(df_b.index)[-lookback_hours:]
+            if len(common) < 10:
+                return True, 1.0
+
+            log_ret_a = np.log(
+                df_a.loc[common, "close"].values[1:]
+                / df_a.loc[common, "close"].values[:-1]
+            )
+            log_ret_b = np.log(
+                df_b.loc[common, "close"].values[1:]
+                / df_b.loc[common, "close"].values[:-1]
+            )
+
+            corr = float(np.corrcoef(log_ret_a, log_ret_b)[0, 1])
+            min_corr = float(os.getenv("REALTIME_CORR_MIN", 0.60))
+            is_ok = corr >= min_corr
+            if not is_ok:
+                logger.warning(
+                    f"Correlation breakdown on {position.pair_key}: "
+                    f"corr={corr:.3f} < {min_corr}"
+                )
+            return is_ok, corr
+
+        except Exception as exc:
+            logger.error(f"check_realtime_correlation {position.pair_key}: {exc}")
+            return True, 1.0
+
+    def _check_rolling_24h_drawdown(self) -> Tuple[float, bool]:
+        """Return (dd_ratio, breached).  dd_ratio is negative when equity fell."""
+        equity_24h_ago = self.state.get_equity_24h_ago()
+        if not equity_24h_ago or equity_24h_ago <= 0:
+            return 0.0, False
+        current = self.state.get_equity()
+        dd = (current - equity_24h_ago) / equity_24h_ago
+        limit = float(os.getenv("ROLLING_24H_DD_LIMIT", 0.05))
+        return dd, dd < -limit
 
     def _check_drawdown(self) -> bool:
         equity = self.state.get_equity()

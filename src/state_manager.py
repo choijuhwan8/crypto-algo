@@ -17,7 +17,7 @@ import csv
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from .config import DATA_DIR, INITIAL_CAPITAL, LOG_DIR, RUN_LOG_FILE
@@ -64,6 +64,30 @@ class StateManager:
             }
         )
         self._save()
+
+    def log_equity_snapshot(self) -> None:
+        """Append a timestamped equity snapshot and trim entries older than 168 h."""
+        now = datetime.now(timezone.utc)
+        self._equity_curve.append({"ts": now.isoformat(), "equity": self._equity})
+        cutoff = now - timedelta(hours=168)
+        self._equity_curve = [
+            pt for pt in self._equity_curve
+            if datetime.fromisoformat(pt["ts"]) > cutoff
+        ]
+        self._save()
+
+    def get_equity_24h_ago(self) -> Optional[float]:
+        """Return the equity value closest to 24 hours ago, or None."""
+        if not self._equity_curve:
+            return None
+        target = datetime.now(timezone.utc) - timedelta(hours=24)
+        closest = min(
+            self._equity_curve,
+            key=lambda pt: abs(
+                (datetime.fromisoformat(pt["ts"]) - target).total_seconds()
+            ),
+        )
+        return float(closest["equity"])
 
     def deduct_fees(self, amount: float) -> None:
         self._total_fees += amount

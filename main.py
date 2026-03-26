@@ -22,6 +22,7 @@ import asyncio
 import logging
 import logging.config
 import os
+import random
 import sys
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -145,7 +146,16 @@ class PaperBot:
 
     async def _hourly_worker(self) -> None:
         """Every 1 h: update candles → signals → entry / exit."""
-        logger.info("--- Hourly worker ---")
+        delay_s = random.randint(0, 15) * 60
+        if delay_s:
+            logger.info(f"Randomized execution delay: {delay_s // 60} min")
+            await asyncio.sleep(delay_s)
+        logger.info(
+            f"--- Hourly worker (actual start {datetime.now(timezone.utc).strftime('%H:%M:%S')} UTC) ---"
+        )
+
+        # Snapshot equity for rolling 24h drawdown tracking
+        self.state.log_equity_snapshot()
 
         pairs = self.pair_selector.get_pairs()
         if not pairs:
@@ -166,6 +176,12 @@ class PaperBot:
             if risk_status.get("kill_active") and not risk_status.get("_kill_alerted"):
                 await self.telegram.alert_kill(risk_status.get("kill_reason", ""))
                 risk_status["_kill_alerted"] = True
+            if risk_status.get("rolling_24h_dd_breach"):
+                dd = risk_status.get("rolling_24h_dd", 0.0)
+                await self.telegram.send(
+                    f"⛔ *Trading paused* – 24h rolling drawdown `{dd:.2%}` "
+                    f"exceeded limit"
+                )
             logger.warning("Risk check failed – skipping signal loop")
             return
 
@@ -195,10 +211,36 @@ class PaperBot:
         tok_b = pair_info["sym_b"]
         pair_key = f"{tok_a}-{tok_b}"
 
+        # Per-pair Cornell params (fall back to global config if absent)
+        pair_window  = pair_info.get("best_t1") or None
+        pair_z_entry = pair_info.get("best_z_entry") or None
+        pair_z_exit  = pair_info.get("best_z_exit")   # 0.0 is valid, so check None explicitly
+        if pair_z_exit is None:
+            pair_z_exit = None
+
         existing_pos = self.state.get_position(pair_key)
 
+        # Max hold period check — force-close before normal signal processing
+        if existing_pos and self.risk.check_max_hold_period(
+            existing_pos, datetime.now(timezone.utc)
+        ):
+            stats = self.signal_svc.compute_stats(tok_a, tok_b, window=pair_window)
+            if stats:
+                pnl = self.execution.exit_position(
+                    existing_pos, stats, reason="max_hold_period"
+                )
+                await self.telegram.alert_exit(pair_key, pnl, "max hold period exceeded")
+            else:
+                logger.warning(
+                    f"Max hold: no stats for {pair_key}, skipping forced close"
+                )
+            return
+
         current_direction = existing_pos.direction if existing_pos else None
-        signal, stats = self.signal_svc.generate_signal(tok_a, tok_b, current_direction)
+        signal, stats = self.signal_svc.generate_signal(
+            tok_a, tok_b, current_direction,
+            window=pair_window, z_entry=pair_z_entry, z_exit=pair_z_exit,
+        )
 
         if not stats:
             return
@@ -220,6 +262,32 @@ class PaperBot:
             existing_pos.current_price_b = pb
             existing_pos.current_zscore = stats["zscore"]
             existing_pos.last_updated = datetime.now(timezone.utc).isoformat()
+
+            # Z-score breakdown check
+            if self.signal_svc.check_zscore_breakdown(existing_pos, stats["zscore"]):
+                pnl = self.execution.exit_position(
+                    existing_pos, stats, reason="zscore_breakdown"
+                )
+                await self.telegram.alert_exit(
+                    pair_key, pnl,
+                    f"z-score breakdown (z={stats['zscore']:.2f})"
+                )
+                return
+
+            # Real-time correlation check
+            lookback = int(os.getenv("REALTIME_CORR_LOOKBACK", 24))
+            is_corr_ok, corr_val = self.risk.check_realtime_correlation(
+                existing_pos, self.ds, lookback_hours=lookback
+            )
+            if not is_corr_ok:
+                pnl = self.execution.exit_position(
+                    existing_pos, stats, reason="correlation_breakdown"
+                )
+                await self.telegram.alert_exit(
+                    pair_key, pnl,
+                    f"correlation breakdown (corr={corr_val:.3f})"
+                )
+                return
 
             # Stop-loss check
             if existing_pos.is_stop_loss(stats["price_a"], stats["price_b"]):

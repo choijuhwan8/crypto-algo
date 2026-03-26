@@ -1,12 +1,18 @@
 """
 Pair-selection service (runs every 24 h).
 
-Pipeline
---------
-1. Correlation filter   – log-price corr > 0.90, return corr > 0.50
-2. Cointegration test   – Engle-Granger ADF p-value < 0.05
-3. IC filter            – rolling IC of z-score ≤ -0.10 (mean-reverting)
-4. Rank by IC and keep top TOP_N_PAIRS
+Pipeline (Cornell paper, pages 10-13)
+--------------------------------------
+1. Same-blockchain filter – pairs must share at least one blockchain ecosystem
+2. Correlation filter     – log-price corr > 0.90, return corr > 0.50
+3. Cointegration test     – Engle-Granger ADF p-value < 0.05 (optional, see note)
+4. IC filter              – best IC across (T1, T2) grid ≤ IC_THRESHOLD
+5. Rank by IC and keep top TOP_N_PAIRS
+
+Note on cointegration (Cornell p.26, Section 6.5):
+  The paper found ADF too restrictive for fast-evolving crypto markets.
+  The unfiltered (no ADF) variant delivered higher Sharpe.  Set
+  COINT_PVALUE_MAX=1.0 in .env to disable the ADF gate entirely.
 
 The selected pairs list is stored in-memory and also written to
 data/selected_pairs.json for inspection.
@@ -36,6 +42,25 @@ from .data_service import DataService
 
 logger = logging.getLogger(__name__)
 
+# Import blockchain mapper — optional; if backtest/ is not on sys.path the
+# filter is silently skipped (live bot path).
+try:
+    import sys as _sys, os as _os
+    _bt_dir = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "backtest")
+    if _bt_dir not in _sys.path:
+        _sys.path.insert(0, _bt_dir)
+    from blockchain_mapper import are_same_blockchain as _same_blockchain
+    _BLOCKCHAIN_FILTER_AVAILABLE = True
+except ImportError:
+    _BLOCKCHAIN_FILTER_AVAILABLE = False
+
+# Use Cornell's full IC search when running in backtest mode
+try:
+    from ic_calculator import find_best_ic as _find_best_ic
+    _IC_SEARCH_AVAILABLE = True
+except ImportError:
+    _IC_SEARCH_AVAILABLE = False
+
 _PAIRS_CACHE_FILE = os.path.join(DATA_DIR, "selected_pairs.json")
 
 
@@ -51,13 +76,23 @@ class PairSelector:
     def run(self, available_tokens: List[str]) -> List[Dict]:
         """Full pair-selection pass.  Returns selected pairs list."""
         all_pairs = list(itertools.combinations(available_tokens, 2))
-        logger.info(
-            f"PairSelector: testing {len(all_pairs)} pairs "
-            f"from {len(available_tokens)} tokens"
-        )
+
+        # ── Filter 1: Same-blockchain (Cornell p.10-11) ──────────────────
+        if _BLOCKCHAIN_FILTER_AVAILABLE:
+            before = len(all_pairs)
+            all_pairs = [
+                (a, b) for a, b in all_pairs if _same_blockchain(a, b)
+            ]
+            logger.info(
+                f"PairSelector: blockchain filter {before} → {len(all_pairs)} pairs"
+            )
+        else:
+            logger.info(
+                f"PairSelector: testing {len(all_pairs)} pairs "
+                f"from {len(available_tokens)} tokens (no blockchain filter)"
+            )
 
         candidates: List[Dict] = []
-
         for tok_a, tok_b in all_pairs:
             result = self._evaluate_pair(tok_a, tok_b)
             if result is not None:
@@ -129,9 +164,22 @@ class PairSelector:
         if adf_pval >= COINT_PVALUE_MAX:
             return None
 
-        # 3. IC filter
-        ic = self._compute_ic(log_a, log_b, float(slope), float(intercept))
-        if ic > IC_THRESHOLD:
+        # 3. IC filter – use Cornell's full (T1, T2) grid when available,
+        #    else fall back to the original single-window IC computation.
+        if _IC_SEARCH_AVAILABLE:
+            ic_result = _find_best_ic(
+                df_a.loc[common, "close"],
+                df_b.loc[common, "close"],
+            )
+            ic = ic_result["best_ic"]
+            best_t1 = ic_result["best_t1"]
+            best_t2 = ic_result["best_t2"]
+        else:
+            ic = self._compute_ic(log_a, log_b, float(slope), float(intercept))
+            best_t1 = ROLLING_WINDOW
+            best_t2 = 24
+
+        if ic > IC_THRESHOLD or np.isnan(ic):
             return None
 
         return {
@@ -144,6 +192,8 @@ class PairSelector:
             "adf_stat": round(float(adf_stat), 4),
             "adf_pvalue": round(float(adf_pval), 4),
             "ic": round(ic, 4),
+            "best_t1": best_t1,
+            "best_t2": best_t2,
         }
 
     def _compute_ic(
