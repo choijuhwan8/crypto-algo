@@ -280,37 +280,12 @@ class PaperBot:
             existing_pos.current_zscore = stats["zscore"]
             existing_pos.last_updated = datetime.now(timezone.utc).isoformat()
 
-            # Z-score breakdown check
-            if self.signal_svc.check_zscore_breakdown(existing_pos, stats["zscore"]):
-                pnl = self.execution.exit_position(
-                    existing_pos, stats, reason="zscore_breakdown"
-                )
-                await self.telegram.alert_exit(
-                    pair_key, pnl,
-                    f"z-score breakdown (z={stats['zscore']:.2f})"
-                )
-                return
-
-            # Real-time correlation check
-            lookback = int(os.getenv("REALTIME_CORR_LOOKBACK", 24))
-            is_corr_ok, corr_val = self.risk.check_realtime_correlation(
-                existing_pos, self.ds, lookback_hours=lookback
-            )
-            if not is_corr_ok:
-                pnl = self.execution.exit_position(
-                    existing_pos, stats, reason="correlation_breakdown"
-                )
-                await self.telegram.alert_exit(
-                    pair_key, pnl,
-                    f"correlation breakdown (corr={corr_val:.3f})"
-                )
-                return
-
-            # Stop-loss check
+            # Stop-loss check (Cornell γ_SL) — triggers 5-day cooldown
             if existing_pos.is_stop_loss(stats["price_a"], stats["price_b"]):
                 pnl = self.execution.exit_position(
                     existing_pos, stats, reason="stop_loss"
                 )
+                self.state.set_cooldown(pair_key, hours=120)  # Cornell Δ_cool = 5 days
                 await self.telegram.alert_stop_loss(pair_key, pnl)
                 return
 
@@ -324,6 +299,9 @@ class PaperBot:
         # --- New entry ---
         elif signal in (Signal.LONG_SPREAD, Signal.SHORT_SPREAD):
             if not self.risk.can_open_position():
+                return
+            if self.state.is_in_cooldown(pair_key):
+                logger.info(f"{pair_key}: skipping entry – in cooldown after stop-loss")
                 return
 
             pos = self.execution.enter_position(

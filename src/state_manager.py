@@ -40,6 +40,7 @@ class StateManager:
         self._open_positions: Dict[str, Any] = {}   # pair_key → Position
         self._closed_positions: List[Dict] = []
         self._equity_curve: List[Dict] = []
+        self._cooldowns: Dict[str, datetime] = {}   # pair_key → cooldown_until (UTC)
 
         self._load()
 
@@ -120,6 +121,19 @@ class StateManager:
             }
         )
         self.update_equity(realized_pnl)
+
+    def set_cooldown(self, pair_key: str, hours: int = 120) -> None:
+        """Block re-entry on pair_key for `hours` hours (Cornell Δ_cool = 5 days)."""
+        self._cooldowns[pair_key] = datetime.now(timezone.utc) + timedelta(hours=hours)
+
+    def is_in_cooldown(self, pair_key: str) -> bool:
+        until = self._cooldowns.get(pair_key)
+        if until is None:
+            return False
+        if datetime.now(timezone.utc) < until:
+            return True
+        del self._cooldowns[pair_key]
+        return False
 
     def get_open_positions(self) -> Dict[str, Any]:
         return self._open_positions
