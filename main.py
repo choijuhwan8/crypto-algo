@@ -260,6 +260,19 @@ class PaperBot:
         )
 
         if not stats:
+            # Even without fresh stats, check stop-loss using last known prices
+            if existing_pos and existing_pos.current_price_a and existing_pos.current_price_b:
+                if existing_pos.is_stop_loss(existing_pos.current_price_a, existing_pos.current_price_b):
+                    # Build minimal stats for exit
+                    minimal_stats = {
+                        "price_a": existing_pos.current_price_a,
+                        "price_b": existing_pos.current_price_b,
+                        "zscore": existing_pos.current_zscore or 0.0,
+                        "beta": 1.0,
+                    }
+                    pnl = self.execution.exit_position(existing_pos, minimal_stats, reason="stop_loss")
+                    self.state.set_cooldown(pair_key, hours=120)
+                    await self.telegram.alert_stop_loss(pair_key, pnl)
             return
 
         zscore = stats["zscore"]
